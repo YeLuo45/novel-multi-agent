@@ -1,0 +1,21 @@
+{
+  "name": "@novel-ma/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "novel-ma": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "cli": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@novel-ma/agents": "file:../agents",
+    "@novel-ma/core": "file:../core"
+  }
+}

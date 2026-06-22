@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.novel-ma/
+test-build/
+packages/*/test-build/
+*.tsbuildinfo
+.env
