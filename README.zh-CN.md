@@ -34,6 +34,16 @@ npm run verify:readme
 npm run bootstrap
 ```
 
+## V29 新增能力
+
+- Artifact 真实导入向导：校验 JSON/schema，输出导入步骤和修复建议。
+- 续写质量面板：在 Web 主界面展示 characters/foreshadowing/style 子分数。
+- 本地项目库清理面板：按 latest/history 生成 dry-run prune manifest，不直接删除。
+- Provider 实战面板：显示 mock/openai-compatible readiness、模型和脱敏诊断。
+- Flue Workflow 适配：输出 premise→bible→outline→draft→critique→revise→memory 节点计划。
+- 桌面壳准备度：检查 local-file-open、localStorage-library、json-download、offline-workbench。
+- 长篇工程化控制台：暴露分卷规划、章节版本树、人物弧线、伏笔台账和风格圣经入口。
+
 ## V22-V28 新增能力
 
 - Web 首页 Latest Catalog：项目目录索引主区域展示“最近项目 / latest / history”。

@@ -29,6 +29,9 @@ describe('web workbench and ci scaffolding', () => {
     assert.ok(html.includes('最近项目'));
     assert.ok(html.includes('导入两个 Artifact 对比'));
     assert.ok(html.includes('导入项目库 Bundle'));
+    for (const label of ['Artifact 真实导入向导', '续写质量面板', '本地项目库清理面板', 'Provider 实战面板', 'Flue Workflow 适配', '桌面壳准备度', '长篇工程化控制台']) {
+      assert.ok(html.includes(label), label);
+    }
     const rootHtml = readFileSync(path.join(root, 'index.html'), 'utf8');
     assert.ok(rootHtml.includes('./apps/web/'));
     assert.ok(rootHtml.includes('导入项目库 Bundle'));
@@ -114,7 +117,7 @@ describe('web workbench and ci scaffolding', () => {
     };
     vm.runInNewContext(script, sandbox);
     const workbench = sandbox.window.NovelWorkbench;
-    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle']) {
+    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle', 'buildImportGuide', 'renderQualityPanel', 'planLibraryCleanup', 'buildProviderReadiness', 'buildFlueWorkflowPlan', 'buildDesktopShellReadiness', 'buildLongformConsole']) {
       assert.equal(typeof workbench[fn], 'function', fn);
     }
 
@@ -170,6 +173,33 @@ describe('web workbench and ci scaffolding', () => {
     assert.equal(mergeResult.issues.length, 1);
     assert.equal(library.load(artifact.projectId).title, '覆盖后的星际茶馆');
     assert.equal(library.load('imported-id').title, imported.title);
+
+    const guide = workbench.buildImportGuide(JSON.stringify(artifact));
+    assert.equal(guide.ok, true);
+    assert.equal(guide.steps.length >= 3, true);
+    const badGuide = workbench.buildImportGuide('{bad json');
+    assert.equal(badGuide.ok, false);
+    assert.ok(badGuide.repairHint.includes('JSON'));
+
+    const qualityPanel = workbench.renderQualityPanel(artifact, '主角带着银匙追踪旧门，短句推进。');
+    assert.ok(qualityPanel.includes('characters'));
+    assert.ok(qualityPanel.includes('foreshadowing'));
+    assert.ok(qualityPanel.includes('style'));
+
+    library.save({ ...artifact, projectId: 'older-history-id', title: '覆盖后的星际茶馆', updatedAt: '2000-01-01T00:00:00.000Z' });
+    const cleanup = workbench.planLibraryCleanup(library.list(), 1);
+    assert.equal(cleanup.dryRun, true);
+    assert.equal(cleanup.remove.length >= 1, true);
+    assert.ok(cleanup.manifest.includes('prune-manifest'));
+
+    const provider = workbench.buildProviderReadiness({ provider: 'mock', model: 'deterministic' });
+    assert.equal(provider.ready, true);
+    assert.ok(provider.diagnostics.some((item: string) => item.includes('mock')));
+    assert.ok(workbench.buildFlueWorkflowPlan(artifact).nodes.includes('premise'));
+    assert.ok(workbench.buildDesktopShellReadiness().checks.includes('local-file-open'));
+    const longform = workbench.buildLongformConsole(library.list());
+    assert.ok(longform.sections.includes('volume-planning'));
+    assert.ok(longform.sections.includes('chapter-version-tree'));
 
     const workflowPath = path.join(root, '.github/workflows/pages.yml');
     assert.equal(existsSync(workflowPath), true);

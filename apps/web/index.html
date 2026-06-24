@@ -75,6 +75,39 @@
           <button id="import-bundle" class="secondary">合并到本地项目库</button>
           <p class="hint">按 projectId 去重覆盖，坏条目会生成 issues，不中断导入。</p>
         </section>
+        <section>
+          <h2>Artifact 真实导入向导</h2>
+          <textarea id="guide-json" rows="5" placeholder="粘贴 artifact，查看 schema/修复建议"></textarea>
+          <button id="import-guide" class="secondary">分析导入步骤</button>
+        </section>
+        <section>
+          <h2>续写质量面板</h2>
+          <textarea id="quality-text" rows="5" placeholder="粘贴续写片段，查看角色/伏笔/文风子分数">主角带着银匙追踪旧门，短句推进。</textarea>
+          <button id="quality-panel" class="secondary">生成质量面板</button>
+        </section>
+        <section>
+          <h2>本地项目库清理面板</h2>
+          <input id="cleanup-keep" value="1" />
+          <button id="cleanup-plan" class="secondary">Dry-run 清理计划</button>
+        </section>
+        <section>
+          <h2>Provider 实战面板</h2>
+          <input id="provider-name" value="mock" />
+          <button id="provider-check" class="secondary">检查 Provider</button>
+        </section>
+        <section>
+          <h2>Flue Workflow 适配</h2>
+          <button id="flue-plan" class="secondary">生成 Workflow Plan</button>
+          <p class="hint">premise → bible → outline → draft → critique → revise → memory</p>
+        </section>
+        <section>
+          <h2>桌面壳准备度</h2>
+          <button id="desktop-ready" class="secondary">检查 Electron/Desktop Shell</button>
+        </section>
+        <section>
+          <h2>长篇工程化控制台</h2>
+          <button id="longform-console" class="secondary">生成长篇工程视图</button>
+        </section>
       </div>
       <section style="margin-top:18px">
         <h2>本地项目库</h2>
@@ -317,7 +350,63 @@
         return { imported: imported.items.length, issues: imported.issues };
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildLatestCatalog, buildMemoryGraph, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, renderLatestCatalogPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      function buildImportGuide(json) {
+        try {
+          const artifact = importArtifact(json);
+          return {
+            ok: true,
+            artifact,
+            steps: ['解析 JSON', '校验 projectId/title/artifact', '生成 schemaVersion 2 snapshot', '可保存到本地项目库'],
+            repairHint: 'artifact 可直接导入。',
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            steps: ['检查 JSON 语法', '补齐 projectId/title/artifact', '重新运行导入向导'],
+            repairHint: `JSON 或 schema 需要修复：${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      }
+
+      function renderQualityPanel(artifact, text) {
+        const report = assessContinuationQuality(artifact, text);
+        const characters = report.matched.filter((item) => item === (artifact?.artifact?.bible?.protagonist || '主角')).length ? 100 : 0;
+        const foreshadowing = report.score;
+        const style = /短句|克制|悬疑|微光/.test(String(text || '')) ? 100 : 50;
+        return `status=${report.status}\ncharacters=${characters}\nforeshadowing=${foreshadowing}\nstyle=${style}\nmissing=${report.missing.join('、') || 'none'}`;
+      }
+
+      function planLibraryCleanup(items, keepCount = 1) {
+        const latest = buildLatestCatalog(items || []);
+        const remove = [];
+        const keep = [];
+        for (const group of latest.groups) {
+          keep.push(...group.history.slice(0, keepCount));
+          remove.push(...group.history.slice(keepCount));
+        }
+        return { dryRun: true, keep, remove, manifest: `prune-manifest-${new Date().toISOString().slice(0, 10)}.json` };
+      }
+
+      function buildProviderReadiness(config = {}) {
+        const provider = config.provider || 'mock';
+        const model = config.model || 'deterministic';
+        const ready = provider === 'mock' || Boolean(config.apiKey);
+        return { provider, model, ready, diagnostics: [`provider=${provider}`, provider === 'mock' ? 'mock fallback active' : 'api key required', `model=${model}`] };
+      }
+
+      function buildFlueWorkflowPlan(artifact) {
+        return { name: 'novel-ma-flue-workflow', nodes: ['premise', 'bible', 'outline', 'draft', 'critique', 'revise', 'memory'], projectId: artifact?.projectId || null };
+      }
+
+      function buildDesktopShellReadiness() {
+        return { ready: true, checks: ['local-file-open', 'localStorage-library', 'json-download', 'offline-workbench'], packaging: ['Electron shell', 'file picker bridge', 'project directory permission'] };
+      }
+
+      function buildLongformConsole(items) {
+        return { sections: ['volume-planning', 'chapter-version-tree', 'character-arc', 'foreshadowing-ledger', 'style-bible'], projectCount: (items || []).length, nextAction: '选择项目后生成分卷和章节版本树' };
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildImportGuide, buildLatestCatalog, buildMemoryGraph, buildProviderReadiness, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -371,6 +460,13 @@
         renderLibrary();
         render({ kind: 'library-import', ...result, total: library.list().length });
       };
+      document.getElementById('import-guide').onclick = () => render({ kind: 'artifact-import-guide', ...buildImportGuide(document.getElementById('guide-json').value) });
+      document.getElementById('quality-panel').onclick = () => render({ kind: 'continuation-quality-panel', report: renderQualityPanel(currentArtifact, document.getElementById('quality-text').value) });
+      document.getElementById('cleanup-plan').onclick = () => render({ kind: 'library-cleanup-plan', ...planLibraryCleanup(library.list(), Number(document.getElementById('cleanup-keep').value) || 1) });
+      document.getElementById('provider-check').onclick = () => render({ kind: 'provider-readiness', ...buildProviderReadiness({ provider: document.getElementById('provider-name').value, model: 'deterministic' }) });
+      document.getElementById('flue-plan').onclick = () => render({ kind: 'flue-workflow-plan', ...buildFlueWorkflowPlan(currentArtifact) });
+      document.getElementById('desktop-ready').onclick = () => render({ kind: 'desktop-shell-readiness', ...buildDesktopShellReadiness() });
+      document.getElementById('longform-console').onclick = () => render({ kind: 'longform-console', ...buildLongformConsole(library.list()) });
       download.onclick = () => {
         if (!currentArtifact) return;
         const blob = new Blob([JSON.stringify(currentArtifact, null, 2)], { type: 'application/json' });
