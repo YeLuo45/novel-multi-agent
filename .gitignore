@@ -4,4 +4,5 @@ dist/
 test-build/
 packages/*/test-build/
 *.tsbuildinfo
+.coverage-v8/
 .env

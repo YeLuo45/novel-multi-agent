@@ -30,3 +30,44 @@ export function extractStyleFingerprint(text: string): string[] {
   if (text.length > 300) markers.push('段落较长，适合悬疑铺陈');
   return markers.length ? markers : ['保持原文叙事视角与节奏'];
 }
+
+export interface ContinuationContextInput {
+  existingText: string;
+  memory: NovelMemory;
+  nextChapterTitle: string;
+  maxRecentChapters?: number;
+}
+
+export interface ContinuationContext {
+  nextChapterTitle: string;
+  recentSummaries: string[];
+  memoryBrief: string;
+  styleGuide: string;
+  promptBlock: string;
+}
+
+function formatMemoryBrief(memory: NovelMemory): string {
+  const characterBrief = Object.entries(memory.characters).map(([name, state]) => `${name}: ${state}`);
+  const sections = [...characterBrief, ...memory.foreshadowing.map((item) => `伏笔: ${item}`)];
+  return sections.length ? sections.join('；') : '暂无稳定记忆。';
+}
+
+export function buildContinuationContext(input: ContinuationContextInput): ContinuationContext {
+  const chapters = splitChapters(input.existingText);
+  const recentSummaries = summarizeRecentChapters(chapters, input.maxRecentChapters ?? 3);
+  const memoryBrief = formatMemoryBrief(input.memory);
+  const styleGuide = input.memory.styleFingerprint.length ? input.memory.styleFingerprint.join('；') : extractStyleFingerprint(input.existingText).join('；');
+  const promptBlock = [
+    `续写目标：${input.nextChapterTitle}`,
+    `前文摘要：${recentSummaries.length ? recentSummaries.join(' / ') : '暂无前文摘要'}`,
+    `记忆约束：${memoryBrief}`,
+    `风格指纹：${styleGuide}`,
+  ].join('\n');
+  return {
+    nextChapterTitle: input.nextChapterTitle,
+    recentSummaries,
+    memoryBrief,
+    styleGuide,
+    promptBlock,
+  };
+}

@@ -18,7 +18,8 @@ describe('deterministic novel pipeline', () => {
 星图移动。`;
     const project = runFullPipeline({ mode: 'continuation', existingText, targetChapters: 4, targetWords: 900, language: 'zh-CN' });
     assert.equal(project.stage, 'completed');
-    assert.ok(project.draft?.body.includes('承接前文'));
+    assert.ok(project.draft?.body.includes('续写目标'));
+    assert.ok(project.draft?.body.includes('记忆约束'));
     assert.ok(project.memory.styleFingerprint.length > 0);
   });
 });

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="sepia">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>novel-multi-agent 工作台</title>
+    <style>
+      :root, [data-theme="light"] { --bg: #f8fafc; --panel: rgba(255,255,255,.86); --text: #172033; --muted: #64748b; --border: #dbe3ee; --accent: #334155; --accent-2: #2563eb; --code: #101827; --code-text: #e5edf7; }
+      [data-theme="dark"] { --bg: #0f172a; --panel: rgba(30,41,59,.9); --text: #e2e8f0; --muted: #94a3b8; --border: #334155; --accent: #64748b; --accent-2: #38bdf8; --code: #020617; --code-text: #dbeafe; }
+      [data-theme="sepia"] { --bg: #f6f0e8; --panel: rgba(255,255,255,.78); --text: #1f2933; --muted: #6b5b4a; --border: #e5d8c8; --accent: #334155; --accent-2: #7c5f45; --code: #172033; --code-text: #e5edf7; }
+      [data-theme="nord"] { --bg: #e5edf7; --panel: rgba(236,242,250,.9); --text: #2e3440; --muted: #5e6f86; --border: #c7d2e1; --accent: #3b4252; --accent-2: #5e81ac; --code: #2e3440; --code-text: #eceff4; }
+      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
+      main { max-width: 1120px; margin: 0 auto; padding: 40px 20px; }
+      header { text-align: center; margin-bottom: 32px; }
+      h1 { font-size: 40px; margin: 0 0 12px; }
+      .toolbar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+      section { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 22px; box-shadow: 0 12px 30px rgba(20,20,20,.08); }
+      textarea, input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: color-mix(in srgb, var(--panel) 82%, white); color: inherit; }
+      button { margin-top: 12px; border: 0; border-radius: 999px; padding: 10px 16px; background: var(--accent); color: white; cursor: pointer; }
+      button.secondary { background: var(--accent-2); }
+      button.danger { background: #b91c1c; }
+      pre { white-space: pre-wrap; background: var(--code); color: var(--code-text); border-radius: 14px; padding: 16px; min-height: 220px; overflow: auto; }
+      .hint, .library { color: var(--muted); font-size: 14px; line-height: 1.5; }
+      .library button { margin-right: 8px; margin-top: 6px; padding: 7px 10px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>novel-multi-agent 工作台</h1>
+        <p>本地零依赖预览：创建、续写、评分、导入对比、项目库、项目目录索引、记忆图谱与 JSON 导出。</p>
+        <div class="toolbar">
+          <label>主题切换 <select id="theme-switcher"><option value="light">light</option><option value="dark">dark</option><option value="sepia">sepia</option><option value="nord">nord</option></select></label>
+          <button id="save-library" class="secondary">保存到本地项目库</button>
+          <button id="export-library" class="secondary">导出项目库</button>
+        </div>
+      </header>
+      <div class="grid">
+        <section>
+          <h2>根据主题创建</h2>
+          <input id="theme" value="月球图书馆的守夜人与失忆AI" />
+          <p class="hint">生成标准 artifact 预览，后续可导入 CLI/存储层。</p>
+          <button id="create">生成本地草案</button>
+        </section>
+        <section>
+          <h2>根据已有篇章续写</h2>
+          <textarea id="chapters" rows="8"># 第一章 月背图书馆
+林澈遇见墨塔。
+# 第二章 会移动的星图
+墨塔提醒林澈不要相信会移动的星图。</textarea>
+          <button id="continue">构建续写上下文</button>
+        </section>
+        <section>
+          <h2>伏笔回收评分</h2>
+          <textarea id="foreshadowing" rows="8">会移动的星图:recovered
+黑匣子里的名字:open
+月尘中的脚印:overdue</textarea>
+          <button id="score">评分并写入预览</button>
+        </section>
+        <section>
+          <h2>Artifact 导入与对比</h2>
+          <textarea id="import-json" rows="8" placeholder="粘贴 artifact JSON"></textarea>
+          <button id="import-compare">导入并对比当前预览</button>
+        </section>
+        <section>
+          <h2>导入两个 Artifact 对比</h2>
+          <textarea id="compare-left" rows="5" placeholder="左侧 artifact JSON"></textarea>
+          <textarea id="compare-right" rows="5" placeholder="右侧 artifact JSON"></textarea>
+          <button id="compare-pair" class="secondary">生成可读 Diff</button>
+        </section>
+      </div>
+      <section style="margin-top:18px">
+        <h2>本地项目库</h2>
+        <div id="library" class="library">暂无保存项目。</div>
+      </section>
+      <section style="margin-top:18px">
+        <h2>项目目录索引 / 最近项目</h2>
+        <div id="latest-catalog" class="library">保存 artifact 后显示 latest/history。</div>
+      </section>
+      <h2>Artifact 预览输出</h2>
+      <button class="secondary" id="download" disabled>下载 artifact JSON</button>
+      <pre id="output">等待操作...</pre>
+    </main>
+    <script>
+      const LIBRARY_KEY = 'novel-ma:artifacts';
+      const THEME_KEY = 'novel-ma:theme';
+
+      function slugify(input) {
+        return String(input || 'untitled').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 48) || 'untitled';
+      }
+
+      function splitChapters(text) {
+        const source = String(text || '').trim();
+        if (!source) return [];
+        const lines = source.split('\n');
+        const chapters = [];
+        let current = null;
+        for (const line of lines) {
+          const heading = line.match(/^\s*(?:#{1,3}\s*)?(第\s*[\d一二三四五六七八九十百千零〇两]+\s*章[^\n]*)\s*$/);
+          if (heading) {
+            if (current) chapters.push({ title: current.title, body: current.body.join('\n').trim() });
+            current = { title: heading[1].trim(), body: [] };
+          } else if (current) {
+            current.body.push(line);
+          }
+        }
+        if (current) chapters.push({ title: current.title, body: current.body.join('\n').trim() });
+        return chapters.length ? chapters : [{ title: '导入章节', body: source }];
+      }
+
+      function scoreForeshadowing(text) {
+        const buckets = { recovered: [], open: [], overdue: [], missing: [] };
+        const lines = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean);
+        for (const line of lines) {
+          const [rawName, rawStatus = 'open'] = line.split(':');
+          const name = rawName.trim();
+          const status = rawStatus.trim().toLowerCase();
+          if (!name) continue;
+          if (status === 'recovered') buckets.recovered.push(name);
+          else if (status === 'overdue') buckets.overdue.push(name);
+          else if (status === 'missing') buckets.missing.push(name);
+          else buckets.open.push(name);
+        }
+        const total = buckets.recovered.length + buckets.open.length + buckets.overdue.length + buckets.missing.length;
+        const score = total === 0 ? 100 : Math.max(0, Math.round((buckets.recovered.length * 100 + buckets.open.length * 55 - buckets.overdue.length * 20 - buckets.missing.length * 35) / total));
+        return {
+          ...buckets,
+          score,
+          revisionAdvice: buckets.overdue.length || buckets.missing.length
+            ? `优先补写或回收：${[...buckets.overdue, ...buckets.missing].join('、')}`
+            : '伏笔状态健康，可继续推进下一章。',
+        };
+      }
+
+      function buildMemoryGraph(artifact) {
+        const score = artifact?.artifact?.foreshadowingScore || { recovered: [], open: [], overdue: [], missing: [] };
+        const nodes = [
+          { id: 'style:default', type: 'style', label: artifact?.artifact?.bible?.tone || '默认文风' },
+          { id: 'character:protagonist', type: 'character', label: artifact?.artifact?.bible?.protagonist || '主角' },
+        ];
+        for (const name of [...(score.recovered || []), ...(score.open || []), ...(score.overdue || []), ...(score.missing || [])]) {
+          nodes.push({ id: `foreshadowing:${name}`, type: 'foreshadowing', label: name });
+        }
+        const edges = nodes.filter((node) => node.type === 'foreshadowing').map((node) => ({ from: 'character:protagonist', to: node.id, type: 'mentions' }));
+        return { nodes, edges };
+      }
+
+      function createFromTheme(theme) {
+        const cleanTheme = String(theme || '未命名主题').trim() || '未命名主题';
+        return {
+          projectId: `${slugify(cleanTheme)}-${Date.now().toString(36)}`,
+          title: `《${cleanTheme}》`,
+          stage: 'completed',
+          chapterTitle: '第1章 异常的开端',
+          artifact: {
+            mode: 'theme',
+            premise: `${cleanTheme}：一个围绕秘密、关系与选择展开的长篇故事。`,
+            bible: { protagonist: '主角', coreConflict: '记忆与真相之间的冲突', tone: '克制、悬疑、带微光' },
+            outline: ['第1章 异常的开端', '第2章 线索的代价', '第3章 被回收的伏笔'],
+            draft: `第1章 异常的开端\n${cleanTheme}的故事从一个不该出现的信号开始。`,
+            critique: '草案已具备主题钩子，下一步应增强人物选择的代价。',
+            revision: '保留主题钩子，并在章末加入可回收伏笔。',
+            memoryUpdate: ['记录主角目标', '记录核心伏笔', '记录文风指纹'],
+          },
+        };
+      }
+
+      function continueFromChapters(text) {
+        const chapters = splitChapters(text);
+        const nextNumber = chapters.length + 1;
+        const recent = chapters.slice(-2).map((chapter) => `${chapter.title}：${chapter.body}`).join('\n');
+        return {
+          projectId: `continuation-${Date.now().toString(36)}`,
+          title: '《续写项目》',
+          stage: 'completed',
+          chapterTitle: `第${nextNumber}章 线索的回声`,
+          artifact: {
+            mode: 'continue',
+            importedChapters: chapters,
+            continuationContext: `续写目标：第${nextNumber}章\n前文摘要：${recent}\n记忆约束：角色/伏笔/风格指纹已注入`,
+            draft: `第${nextNumber}章 线索的回声\n上一章留下的细节开始回响，人物必须为继续追索付出代价。`,
+            critique: '续写草案已引用最近章节，应继续检查伏笔回收节奏。',
+            revision: '加强与上一章最后一个意象的衔接。',
+          },
+        };
+      }
+
+      function buildArtifact(mode, input, foreshadowingText) {
+        const base = mode === 'continue' ? continueFromChapters(input) : createFromTheme(input);
+        const artifact = { ...base, artifact: { ...base.artifact, foreshadowingScore: scoreForeshadowing(foreshadowingText) } };
+        artifact.artifact.memoryGraph = buildMemoryGraph(artifact);
+        return artifact;
+      }
+
+      function importArtifact(json) {
+        const parsed = typeof json === 'string' ? JSON.parse(json) : json;
+        if (!parsed || typeof parsed !== 'object' || !parsed.projectId || !parsed.title || !parsed.artifact) throw new Error('Invalid artifact JSON');
+        return parsed;
+      }
+
+      function compareArtifacts(left, right) {
+        const fields = [
+          ['title', left?.title, right?.title],
+          ['mode', left?.artifact?.mode, right?.artifact?.mode],
+          ['chapterTitle', left?.chapterTitle, right?.chapterTitle],
+          ['foreshadowingScore', left?.artifact?.foreshadowingScore?.score, right?.artifact?.foreshadowingScore?.score],
+        ];
+        return fields.filter(([, a, b]) => JSON.stringify(a) !== JSON.stringify(b)).map(([field, leftValue, rightValue]) => ({ field, left: leftValue, right: rightValue }));
+      }
+
+      function createLibrary(storage = localStorage) {
+        const read = () => JSON.parse(storage.getItem(LIBRARY_KEY) || '[]');
+        const write = (items) => storage.setItem(LIBRARY_KEY, JSON.stringify(items));
+        return {
+          list() { return read(); },
+          save(artifact) {
+            const items = read().filter((item) => item.projectId !== artifact.projectId);
+            const saved = { ...artifact, savedAt: new Date().toISOString() };
+            write([saved, ...items]);
+            return saved;
+          },
+          load(projectId) { return read().find((item) => item.projectId === projectId) || null; },
+          remove(projectId) { write(read().filter((item) => item.projectId !== projectId)); },
+          exportAll() { return JSON.stringify(read(), null, 2); },
+        };
+      }
+
+      function applyTheme(theme, storage = localStorage, doc = document) {
+        const next = ['light', 'dark', 'sepia', 'nord'].includes(theme) ? theme : 'sepia';
+        doc.documentElement.dataset.theme = next;
+        storage.setItem(THEME_KEY, next);
+        return next;
+      }
+
+      function normalizeArtifact(artifact) {
+        return { schemaVersion: 2, summary: { projectId: artifact.projectId, title: artifact.title, stage: artifact.stage, chapterTitle: artifact.chapterTitle, mode: artifact.artifact?.mode || 'theme' }, artifact, graph: buildMemoryGraph(artifact) };
+      }
+
+      function buildLatestCatalog(items) {
+        const groups = new Map();
+        for (const item of items || []) {
+          const key = `${item.title}|${item.artifact?.mode || 'theme'}`;
+          groups.set(key, [...(groups.get(key) || []), item]);
+        }
+        const result = [...groups.entries()].map(([key, history]) => {
+          const sorted = [...history].sort((a, b) => String(b.updatedAt || b.savedAt || '').localeCompare(String(a.updatedAt || a.savedAt || '')) || String(b.projectId).localeCompare(String(a.projectId)));
+          return { key, latest: sorted[0], history: sorted };
+        });
+        return { groups: result, items: result.map((group) => group.latest) };
+      }
+
+      function searchLibrary(items, query) {
+        const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+        const matched = !terms.length ? (items || []) : (items || []).filter((item) => terms.every((term) => JSON.stringify(item).toLowerCase().includes(term)));
+        return { query, items: matched };
+      }
+
+      function assessContinuationQuality(artifact, text) {
+        const source = String(text || '').toLowerCase();
+        const score = artifact?.artifact?.foreshadowingScore || { recovered: [], open: [], overdue: [], missing: [] };
+        const candidates = [...(score.recovered || []), ...(score.open || []), ...(score.overdue || []), ...(score.missing || []), artifact?.artifact?.bible?.protagonist || '主角'];
+        const matched = candidates.filter((item) => {
+          const value = String(item).toLowerCase();
+          if (source.includes(value)) return true;
+          return value.split(/[\s:：，。、；;,.!?！？、]+/).filter((token) => token.length >= 2).some((token) => source.includes(token));
+        });
+        const ratio = candidates.length ? matched.length / candidates.length : 1;
+        return { status: ratio >= 0.5 ? 'pass' : ratio > 0 ? 'warn' : 'fail', score: Math.round(ratio * 100), matched, missing: candidates.filter((item) => !matched.includes(item)) };
+      }
+
+      function formatDiffReport(diff) {
+        return diff.length ? diff.map((item) => `${item.field}: ${JSON.stringify(item.left)} → ${JSON.stringify(item.right)}`).join('\n') : 'No artifact differences.';
+      }
+
+      function renderLatestCatalogPanel(items) {
+        const latest = buildLatestCatalog(items || []);
+        if (!latest.groups.length) return '最近项目：暂无保存项目。';
+        return `最近项目\n${latest.groups.map((group) => `- ${group.latest.title} / ${group.latest.chapterTitle} / history ${group.history.length}`).join('\n')}`;
+      }
+
+      function compareImportedArtifacts(leftJson, rightJson) {
+        const left = importArtifact(leftJson);
+        const right = importArtifact(rightJson);
+        const diff = compareArtifacts(left, right);
+        return { left, right, diff, report: formatDiffReport(diff) };
+      }
+
+      function exportLibraryBundle(items) {
+        return { schemaVersion: 1, exportedAt: new Date().toISOString(), items: items.map((item) => ({ ...item })) };
+      }
+
+      function importLibraryBundle(json) {
+        const parsed = typeof json === 'string' ? JSON.parse(json) : json;
+        const rawItems = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+        const items = [];
+        const issues = [];
+        rawItems.forEach((item, index) => {
+          try {
+            items.push(importArtifact(item));
+          } catch (error) {
+            issues.push({ index, message: error instanceof Error ? error.message : String(error) });
+          }
+        });
+        return { items, issues };
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildLatestCatalog, buildMemoryGraph, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, normalizeArtifact, renderLatestCatalogPanel, searchLibrary, scoreForeshadowing, splitChapters };
+
+      const output = document.getElementById('output');
+      const download = document.getElementById('download');
+      const libraryView = document.getElementById('library');
+      const latestCatalogView = document.getElementById('latest-catalog');
+      const themeSwitcher = document.getElementById('theme-switcher');
+      const library = createLibrary(localStorage);
+      let currentArtifact = null;
+
+      function render(artifact) {
+        currentArtifact = artifact;
+        output.textContent = JSON.stringify(artifact, null, 2);
+        download.disabled = false;
+      }
+
+      function renderLibrary() {
+        const items = library.list();
+        libraryView.innerHTML = items.length ? '' : '暂无保存项目。';
+        latestCatalogView.textContent = renderLatestCatalogPanel(items);
+        for (const item of items) {
+          const row = document.createElement('div');
+          row.textContent = `${item.title} / ${item.chapterTitle} / ${item.savedAt || ''}`;
+          const open = document.createElement('button');
+          open.textContent = '打开';
+          open.onclick = () => render(item);
+          const remove = document.createElement('button');
+          remove.textContent = '删除';
+          remove.className = 'danger';
+          remove.onclick = () => { library.remove(item.projectId); renderLibrary(); };
+          row.append(open, remove);
+          libraryView.append(row);
+        }
+      }
+
+      const initialTheme = localStorage.getItem(THEME_KEY) || 'sepia';
+      applyTheme(initialTheme);
+      themeSwitcher.value = initialTheme;
+      themeSwitcher.onchange = () => applyTheme(themeSwitcher.value);
+      document.getElementById('create').onclick = () => render(buildArtifact('theme', document.getElementById('theme').value, document.getElementById('foreshadowing').value));
+      document.getElementById('continue').onclick = () => render(buildArtifact('continue', document.getElementById('chapters').value, document.getElementById('foreshadowing').value));
+      document.getElementById('score').onclick = () => render({ kind: 'foreshadowing-score', ...scoreForeshadowing(document.getElementById('foreshadowing').value) });
+      document.getElementById('save-library').onclick = () => { if (currentArtifact?.projectId) { library.save(currentArtifact); renderLibrary(); } };
+      document.getElementById('export-library').onclick = () => render({ kind: 'library-export', items: library.list() });
+      document.getElementById('import-compare').onclick = () => {
+        const imported = importArtifact(document.getElementById('import-json').value);
+        render({ kind: 'artifact-diff', diff: compareArtifacts(currentArtifact, imported), imported });
+      };
+      document.getElementById('compare-pair').onclick = () => render({ kind: 'artifact-diff-report', ...compareImportedArtifacts(document.getElementById('compare-left').value, document.getElementById('compare-right').value) });
+      download.onclick = () => {
+        if (!currentArtifact) return;
+        const blob = new Blob([JSON.stringify(currentArtifact, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${currentArtifact.projectId || 'foreshadowing-score'}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      };
+      renderLibrary();
+    </script>
+  </body>
+</html>

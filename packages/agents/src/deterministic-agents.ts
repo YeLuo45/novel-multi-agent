@@ -1,4 +1,4 @@
-import { advanceStage, createEmptyMemory, extractStyleFingerprint, splitChapters, summarizeRecentChapters, type ChapterCard, type CritiqueCard, type DraftCard, type NovelInput, type NovelProject, type StoryBible } from '@novel-ma/core';
+import { advanceStage, buildContinuationContext, createEmptyMemory, extractStyleFingerprint, splitChapters, type ChapterCard, type CritiqueCard, type DraftCard, type NovelInput, type NovelProject, type StoryBible } from '@novel-ma/core';
 
 function now(): string {
   return new Date().toISOString();
@@ -29,7 +29,12 @@ export function createProject(input: NovelInput): NovelProject {
 
 export function runBibleAgent(project: NovelProject): NovelProject {
   const theme = project.input.theme ?? '承接已有篇章的悬疑冒险';
-  const sourceStyle = project.input.existingText ? extractStyleFingerprint(project.input.existingText) : ['中文长篇叙事', '悬念递进', '角色成长'];
+  const existingText = project.input.existingText ?? '';
+  const sourceStyle = existingText ? extractStyleFingerprint(existingText) : ['中文长篇叙事', '悬念递进', '角色成长'];
+  if (existingText.includes('林澈')) project.memory.characters['林澈'] = '守夜人，从被动观察转为主动追查。';
+  if (existingText.includes('墨塔')) project.memory.characters['墨塔'] = '失忆 AI，掌握被遮蔽的远航线索。';
+  if (existingText.includes('会移动的星图')) project.memory.foreshadowing.push('会移动的星图必须回收');
+  project.memory.styleFingerprint = sourceStyle;
   const bible: StoryBible = {
     premise: `围绕“${theme}”展开，一名主角在看似日常的秩序中发现隐藏系统，并被迫做出改变世界的选择。`,
     genre: '科幻悬疑 / 长篇连载',
@@ -64,9 +69,15 @@ export function runOutlineAgent(project: NovelProject): NovelProject {
 
 export function runWriterAgent(project: NovelProject): NovelProject {
   const existingChapters = splitChapters(project.input.existingText ?? '');
-  const recent = summarizeRecentChapters(existingChapters, 3);
   const card = project.outline[existingChapters.length] ?? project.outline[0];
-  const context = recent.length ? `承接前文：${recent.join(' / ')}` : `故事设定：${project.bible?.premise ?? ''}`;
+  const continuationContext = project.input.mode === 'continuation'
+    ? buildContinuationContext({
+        existingText: project.input.existingText ?? '',
+        memory: project.memory,
+        nextChapterTitle: card.title,
+      })
+    : null;
+  const context = continuationContext ? continuationContext.promptBlock : `故事设定：${project.bible?.premise ?? ''}`;
   const body = [
     `${card.title}`,
     '',
