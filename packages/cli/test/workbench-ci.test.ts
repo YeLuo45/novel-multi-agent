@@ -29,6 +29,12 @@ describe('web workbench and ci scaffolding', () => {
     assert.ok(html.includes('最近项目'));
     assert.ok(html.includes('导入两个 Artifact 对比'));
     assert.ok(html.includes('导入项目库 Bundle'));
+    const rootHtml = readFileSync(path.join(root, 'index.html'), 'utf8');
+    assert.ok(rootHtml.includes('./apps/web/'));
+    assert.ok(rootHtml.includes('导入项目库 Bundle'));
+    assert.ok(rootHtml.includes('GitHub Pages legacy 根入口'));
+    assert.ok(rootHtml.includes('https://yeluo45.github.io/novel-multi-agent/apps/web/'));
+    assert.ok(rootHtml.includes('file://'));
   });
 
   it('configures GitHub Actions to run install, check, test, build, coverage, and README verification', () => {

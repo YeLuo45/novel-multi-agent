@@ -74,7 +74,7 @@ npm run bootstrap
 - 章节版本树：`artifact-version-tree` 可把 outline/import/revision 组织成父子版本链，便于追踪多轮改稿。
 - 记忆卡片与关系图：artifact 内包含角色/伏笔/文风 graph。
 - 主题切换：light/dark/sepia/nord 四套主题，首页主区域可见。
-- GitHub Pages：`.github/workflows/pages.yml` 可部署 `apps/web` 静态工作台。
+- GitHub Pages：`.github/workflows/pages.yml` 可部署 `apps/web` 静态工作台；根 `index.html` 兼容 legacy Pages，并跳转到 `apps/web/`。
 
 ## V4 新增能力
 
