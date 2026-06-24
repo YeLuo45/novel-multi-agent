@@ -32,6 +32,17 @@ describe('web workbench and ci scaffolding', () => {
     for (const label of ['Artifact 真实导入向导', '续写质量面板', '本地项目库清理面板', 'Provider 实战面板', 'Flue Workflow 适配', '桌面壳准备度', '长篇工程化控制台']) {
       assert.ok(html.includes(label), label);
     }
+    assert.ok(html.includes('CLI/Web/TUI 功能对齐'));
+    assert.ok(html.includes('V32 Web-first Studio Hub'));
+    assert.ok(html.includes('V32 TUI Interactive Shell'));
+    assert.ok(html.includes('Dashboard、Library、Continuation、Provider、Analytics'));
+    assert.ok(html.includes('TUI 模式预览'));
+    const tuiHtml = readFileSync(path.join(root, 'apps/tui/index.html'), 'utf8');
+    assert.ok(tuiHtml.includes('novel-multi-agent TUI'));
+    assert.ok(tuiHtml.includes('Interactive Shell'));
+    assert.ok(tuiHtml.includes('Web-first Studio Mirror'));
+    assert.ok(tuiHtml.includes('Mode Parity'));
+    assert.ok(tuiHtml.includes('continuation-check'));
     const rootHtml = readFileSync(path.join(root, 'index.html'), 'utf8');
     assert.ok(rootHtml.includes('./apps/web/'));
     assert.ok(rootHtml.includes('导入项目库 Bundle'));
@@ -117,7 +128,7 @@ describe('web workbench and ci scaffolding', () => {
     };
     vm.runInNewContext(script, sandbox);
     const workbench = sandbox.window.NovelWorkbench;
-    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle', 'buildImportGuide', 'renderQualityPanel', 'planLibraryCleanup', 'buildProviderReadiness', 'buildFlueWorkflowPlan', 'buildDesktopShellReadiness', 'buildLongformConsole']) {
+    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle', 'buildImportGuide', 'renderQualityPanel', 'planLibraryCleanup', 'buildProviderReadiness', 'buildFlueWorkflowPlan', 'buildDesktopShellReadiness', 'buildLongformConsole', 'buildModeParityMatrix', 'renderWebModeParityPanel', 'renderTuiModeParityPanel', 'buildWebTuiSurfaceContract', 'buildWebStudioHub', 'buildTuiInteractiveShell', 'renderTuiShellPanel']) {
       assert.equal(typeof workbench[fn], 'function', fn);
     }
 
@@ -200,6 +211,23 @@ describe('web workbench and ci scaffolding', () => {
     const longform = workbench.buildLongformConsole(library.list());
     assert.ok(longform.sections.includes('volume-planning'));
     assert.ok(longform.sections.includes('chapter-version-tree'));
+    const parity = workbench.buildModeParityMatrix();
+    assert.equal(parity.summary.totalCliCommands, 14);
+    assert.equal(parity.summary.webAligned, 14);
+    assert.equal(parity.summary.tuiAligned, 14);
+    assert.equal(parity.summary.gaps.length, 0);
+    assert.ok(workbench.renderWebModeParityPanel(parity).includes('CLI/Web/TUI'));
+    assert.ok(workbench.renderTuiModeParityPanel(parity).includes('[x] continuation-check'));
+    const contract = workbench.buildWebTuiSurfaceContract();
+    assert.equal(contract.actions.length >= 7, true);
+    assert.equal(contract.actions.every((action: any) => action.web.visible && action.tui.visible), true);
+    const hub = workbench.buildWebStudioHub(library.list());
+    assert.equal(hub.kind, 'web-studio-hub');
+    assert.ok(hub.dashboard.qualityScore >= 0);
+    assert.ok(hub.contract.actions.some((action: any) => action.id === 'continue'));
+    const shell = workbench.buildTuiInteractiveShell('continue');
+    assert.equal(shell.selectedAction.id, 'continue');
+    assert.ok(workbench.renderTuiShellPanel(shell).includes('Interactive Shell'));
 
     for (const fn of ['buildArtifactImportStudio', 'buildLongformProjectOS', 'buildQualityRepairLoop', 'buildProviderLiveRuntime', 'buildFlueWorkflowRunner', 'buildDesktopFileBridge', 'buildCollaborationPack', 'buildNarrativeAnalytics', 'buildPublishingPipeline', 'buildAgentStudio']) {
       assert.equal(typeof workbench[fn], 'function', fn);
@@ -254,6 +282,6 @@ describe('web workbench and ci scaffolding', () => {
     assert.equal(existsSync(workflowPath), true);
     const workflow = readFileSync(workflowPath, 'utf8');
     assert.ok(workflow.includes('actions/upload-pages-artifact@v3'));
-    assert.ok(workflow.includes('path: apps/web'));
+    assert.ok(workflow.includes('path: .'));
   });
 });

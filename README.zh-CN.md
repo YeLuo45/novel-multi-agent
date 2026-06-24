@@ -34,6 +34,22 @@ npm run verify:readme
 npm run bootstrap
 ```
 
+## V32 新增能力
+
+- Web-first Studio Hub：把 Dashboard、Artifact Library Pro、Continuation Studio、Provider Console、Narrative Analytics 收敛到首页主入口。
+- Web Project Dashboard：展示项目数、最近项目、质量分、伏笔健康度和继续写作/质量修复/版本对比快捷动作。
+- Artifact Library Pro：支持模式过滤、语义搜索索引、标签过滤和 diff picker 候选集。
+- Continuation Studio：将已有章节、记忆、伏笔、风格、续写草稿和 repair suggestion 拆成可读面板。
+- TUI Interactive Shell：`apps/tui/index.html` 从静态对齐表升级为交互式 shell 预览，命令菜单镜像 Web 主流程。
+- Shared Surface Contract：Web/TUI 共享 action contract，避免 CLI/Web/TUI 后续能力漂移。
+
+## V31 新增能力
+
+- CLI/Web/TUI 功能对齐矩阵：14 个 CLI 命令统一映射到 Web 工作台和 TUI 模式，避免多入口漂移。
+- Web 模式新增“CLI/Web/TUI 功能对齐”和“TUI 模式预览”入口，可直接生成对齐矩阵和 TUI 面板文本。
+- TUI 模式新增 `apps/tui/index.html` 静态终端面板，覆盖 new、continue、provider、artifact、continuation-check 等 CLI 能力。
+- `packages/cli/src/mode-parity.ts` 提供共享矩阵、Web 面板渲染和 TUI 面板渲染，CLI/TUI/Web 后续都可复用。
+
 ## V30 新增能力
 
 - Artifact Import Studio：批量导入前输出 schema diff、导入预览和 rollback token。

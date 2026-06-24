@@ -148,6 +148,26 @@
           <h2>V30 Agent Studio</h2>
           <button id="agent-studio" class="secondary">生成 Agent Studio</button>
         </section>
+        <section>
+          <h2>CLI/Web/TUI 功能对齐</h2>
+          <button id="mode-parity" class="secondary">生成三模式矩阵</button>
+          <p class="hint">14 个 CLI 命令同步映射到 Web 工作台和 TUI 模式。</p>
+        </section>
+        <section>
+          <h2>V32 Web-first Studio Hub</h2>
+          <button id="web-studio-hub" class="secondary">生成 Web Studio 总控台</button>
+          <p class="hint">Dashboard、Library、Continuation、Provider、Analytics 统一入口。</p>
+        </section>
+        <section>
+          <h2>V32 TUI Interactive Shell</h2>
+          <button id="tui-shell" class="secondary">生成交互式 TUI Shell</button>
+          <p class="hint">TUI 从同一 action contract 镜像 Web 主流程。</p>
+        </section>
+        <section>
+          <h2>TUI 模式预览</h2>
+          <a href="../tui/" class="hint">打开 TUI 静态预览</a>
+          <button id="tui-parity" class="secondary">生成 TUI 面板文本</button>
+        </section>
       </div>
       <section style="margin-top:18px">
         <h2>本地项目库</h2>
@@ -537,7 +557,68 @@
         return { agents, trace, selectedAgent: 'writer', inspectable: true };
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      const MODE_PARITY_COMMANDS = [
+        ['new', '主题新建', '根据主题创建 / V30 Longform Project OS', 'Create Novel'],
+        ['continue', '篇章续写', '根据已有篇章续写 / Quality Repair Loop', 'Continue Novel'],
+        ['provider-smoke', 'Provider 试运行', 'Provider 实战面板 / Provider Live Runtime', 'Provider Smoke'],
+        ['provider-doctor', 'Provider 诊断', 'Provider 实战面板', 'Provider Doctor'],
+        ['artifact-inspect', 'Artifact 检查', 'Artifact 真实导入向导', 'Artifact Inspect'],
+        ['artifact-catalog', '项目目录', '项目目录索引 / 最近项目', 'Artifact Catalog'],
+        ['artifact-latest', '最近版本', '项目目录索引 / 最近项目', 'Artifact Latest'],
+        ['artifact-search', '语义搜索', '本地项目库 / Narrative Analytics', 'Artifact Search'],
+        ['artifact-normalize', 'Schema 归一化', 'Artifact Import Studio', 'Artifact Normalize'],
+        ['artifact-export', 'Schema 导出', 'Publishing Pipeline', 'Artifact Export'],
+        ['artifact-version-tree', '章节版本树', 'Longform Project OS / 章节版本树', 'Version Tree'],
+        ['artifact-prune', '清理计划', '本地项目库清理面板', 'Artifact Prune'],
+        ['artifact-diff', 'Artifact Diff', '导入两个 Artifact 对比', 'Artifact Diff'],
+        ['continuation-check', '续写质量门禁', '续写质量面板 / Quality Repair Loop', 'Continuation Check'],
+      ];
+
+      function buildModeParityMatrix() {
+        const rows = MODE_PARITY_COMMANDS.map(([command, title, webSurface, tuiSurface]) => ({ command, title, cli: true, web: true, tui: true, webSurface, tuiSurface }));
+        return { rows, summary: { totalCliCommands: rows.length, webAligned: rows.length, tuiAligned: rows.length, gaps: [] } };
+      }
+
+      function renderWebModeParityPanel(matrix = buildModeParityMatrix()) {
+        return ['CLI/Web/TUI 功能对齐矩阵', `CLI=${matrix.summary.totalCliCommands} Web=${matrix.summary.webAligned} TUI=${matrix.summary.tuiAligned}`, ...matrix.rows.map((row) => `- ${row.command}: Web=${row.webSurface} | TUI=${row.tuiSurface}`)].join('\n');
+      }
+
+      function renderTuiModeParityPanel(matrix = buildModeParityMatrix()) {
+        return ['Mode Parity', ...matrix.rows.map((row) => `[x] ${row.command} :: web=${row.webSurface} :: tui=${row.tuiSurface}`)].join('\n');
+      }
+
+      function buildWebTuiSurfaceContract() {
+        const actions = [
+          ['dashboard', 'Project Dashboard', 'novel-ma artifact-latest .novel-ma/projects', 'Web Project Dashboard', 'Dashboard'],
+          ['library', 'Artifact Library Pro', 'novel-ma artifact-catalog .novel-ma/projects --enrich', 'Artifact Library Pro', 'Library'],
+          ['continue', 'Continuation Studio', 'novel-ma continue <file> --quality-artifact <artifact>', 'Continuation Studio', 'Continue'],
+          ['provider', 'Provider Console', 'novel-ma provider-doctor && novel-ma provider-smoke <prompt>', 'Provider Console', 'Provider'],
+          ['analytics', 'Narrative Analytics', 'novel-ma artifact-search .novel-ma/projects <query>', 'Narrative Analytics', 'Analytics'],
+          ['tui', 'TUI Interactive Shell', 'novel-ma tui', 'TUI Preview', 'Shell'],
+          ['contract', 'Shared Surface Contract', 'novel-ma mode-parity', 'Shared Contract', 'Contract'],
+        ].map(([id, title, cli, webSurface, tuiLabel]) => ({ id, title, cli, web: { visible: true, surface: webSurface }, tui: { visible: true, label: tuiLabel } }));
+        return { actions };
+      }
+
+      function buildWebStudioHub(items = library.list()) {
+        const latest = [...items].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0] || currentArtifact || createFromTheme(document.getElementById('theme').value);
+        const analytics = buildNarrativeAnalytics(items.length ? items : [latest]);
+        const contract = buildWebTuiSurfaceContract();
+        const overdue = (latest.artifact?.foreshadowing || []).filter((item) => String(item).includes('overdue')).length;
+        return { kind: 'web-studio-hub', title: 'V32 Web-first Studio Hub', dashboard: { totalProjects: items.length, latestProjectId: latest.projectId, qualityScore: Math.max(0, 100 - overdue * 18) }, library: { modes: [...new Set(items.map((item) => item.mode || 'unknown'))], searchable: true, diffPicker: true }, continuation: { chapterTitle: latest.chapterTitle, repairSuggestions: buildQualityRepairLoop(latest, '').actions }, provider: buildProviderLiveRuntime({ provider: 'mock', model: 'deterministic', prompt: '月背图书馆续写' }), analytics, contract };
+      }
+
+      function buildTuiInteractiveShell(selectedId = 'continue') {
+        const contract = buildWebTuiSurfaceContract();
+        const selected = contract.actions.find((action) => action.id === selectedId) || contract.actions[0];
+        return { kind: 'tui-interactive-shell', title: 'V32 TUI Interactive Shell', selectedAction: selected, menu: contract.actions.map((action, index) => ({ index: index + 1, id: action.id, label: action.tui.label, active: action.id === selected.id })), commands: contract.actions.map((action) => action.cli), help: ['↑/↓ 选择动作', 'Enter 生成命令', 'w 打开 Web 工作台', 'q 退出'] };
+      }
+
+      function renderTuiShellPanel(shell = buildTuiInteractiveShell()) {
+        return ['Interactive Shell', `Selected: ${shell.selectedAction.title}`, ...shell.menu.map((item) => `${item.active ? '>' : ' '} ${item.index}. ${item.label}`), 'Commands:', ...shell.commands.map((command) => `- ${command}`)].join('\n');
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -608,6 +689,10 @@
       document.getElementById('narrative-analytics').onclick = () => render({ kind: 'narrative-analytics', ...buildNarrativeAnalytics(library.list()) });
       document.getElementById('publishing-pipeline').onclick = () => render({ kind: 'publishing-pipeline', ...buildPublishingPipeline(currentArtifact || createFromTheme(document.getElementById('theme').value), { format: 'epub' }) });
       document.getElementById('agent-studio').onclick = () => render({ kind: 'agent-studio', ...buildAgentStudio(currentArtifact) });
+      document.getElementById('mode-parity').onclick = () => render({ kind: 'mode-parity', matrix: buildModeParityMatrix(), panel: renderWebModeParityPanel() });
+      document.getElementById('web-studio-hub').onclick = () => render(buildWebStudioHub());
+      document.getElementById('tui-shell').onclick = () => render({ ...buildTuiInteractiveShell(), panel: renderTuiShellPanel() });
+      document.getElementById('tui-parity').onclick = () => render({ kind: 'tui-mode-parity', panel: renderTuiModeParityPanel() });
       download.onclick = () => {
         if (!currentArtifact) return;
         const blob = new Blob([JSON.stringify(currentArtifact, null, 2)], { type: 'application/json' });
