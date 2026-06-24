@@ -5,7 +5,7 @@
   "type": "module",
   "workspaces": ["packages/*"],
   "scripts": {
-    "check": "npm run check -w @novel-ma/core && npm run check -w @novel-ma/agents && npm run check -w @novel-ma/cli",
+    "check": "npm run build -w @novel-ma/core && npm run build -w @novel-ma/agents && npm run check -w @novel-ma/core && npm run check -w @novel-ma/agents && npm run check -w @novel-ma/cli",
     "build": "npm run build -w @novel-ma/core && npm run build -w @novel-ma/agents && npm run build -w @novel-ma/cli",
     "test": "npm run test -w @novel-ma/core && npm run test -w @novel-ma/agents && npm run test -w @novel-ma/cli",
     "coverage:incremental": "node scripts/incremental-coverage.mjs",
