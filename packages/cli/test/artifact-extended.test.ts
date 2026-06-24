@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { runArtifactDiff, runArtifactExport, runArtifactLatest, runArtifactNormalize, runArtifactPrune, runArtifactSearch, runContinuationCheck, runContinue } from '../src/index.js';
+import { runArtifactDiff, runArtifactExport, runArtifactLatest, runArtifactNormalize, runArtifactPrune, runArtifactSearch, runArtifactVersionTree, runContinuationCheck, runContinue } from '../src/index.js';
 
 function projectJson(id: string, title: string, createdAt: string, text = '林墨握住银色书签，短句冷色意象。', setup = '银色书签'): string {
   return JSON.stringify({
@@ -57,6 +57,11 @@ describe('artifact extended cli runners', () => {
       const exported = await runArtifactExport([newPath], dir);
       assert.equal(exported.schemaVersion, 2);
       assert.equal(exported.summary.projectId, 'new');
+
+      const versionTree = await runArtifactVersionTree([newPath], dir);
+      assert.equal(versionTree.latestByChapter[0]?.chapterNumber, 1);
+      assert.equal(versionTree.latestByChapter[0]?.source, 'revision');
+      assert.equal(versionTree.roots[0]?.children.length, 1);
 
       const prune = await runArtifactPrune([dir, '--keep', '1'], dir);
       assert.equal(prune.dryRun, true);

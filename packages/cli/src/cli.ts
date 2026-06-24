@@ -5,6 +5,7 @@ import {
   runArtifactLatest,
   runArtifactNormalize,
   runArtifactPrune,
+  runArtifactVersionTree,
   runArtifactExport,
   runArtifactSearch,
   runContinuationCheck,
@@ -56,6 +57,10 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(await runArtifactExport(args), null, 2));
     return;
   }
+  if (command === 'artifact-version-tree') {
+    console.log(JSON.stringify(await runArtifactVersionTree(args), null, 2));
+    return;
+  }
   if (command === 'artifact-prune') {
     console.log(JSON.stringify(await runArtifactPrune(args), null, 2));
     return;
@@ -69,7 +74,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(await runContinuationCheck(args), null, 2));
     return;
   }
-  throw new Error('Usage: novel-ma <new|continue|provider-smoke|provider-doctor|artifact-inspect|artifact-catalog|artifact-latest|artifact-search|artifact-normalize|artifact-export|artifact-prune|artifact-diff|continuation-check> <theme-or-file-or-prompt> [--chapters N] [--words N]');
+  throw new Error('Usage: novel-ma <new|continue|provider-smoke|provider-doctor|artifact-inspect|artifact-catalog|artifact-latest|artifact-search|artifact-normalize|artifact-export|artifact-version-tree|artifact-prune|artifact-diff|continuation-check> <theme-or-file-or-prompt> [--chapters N] [--words N]');
 }
 
 main().catch((error: unknown) => {

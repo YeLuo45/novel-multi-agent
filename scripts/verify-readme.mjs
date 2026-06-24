@@ -39,6 +39,11 @@ for (const [cmd, args] of commands) {
 
 try {
   const [left, right] = findArtifactPaths();
+  if (left) {
+    const args = ['run', 'cli', '--', 'artifact-version-tree', left];
+    console.log(`$ npm ${args.join(' ')}`);
+    execFileSync('npm', args, { stdio: 'inherit' });
+  }
   if (left && right) {
     const args = ['run', 'cli', '--', 'artifact-diff', left, right, '--format', 'text'];
     console.log(`$ npm ${args.join(' ')}`);

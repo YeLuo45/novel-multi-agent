@@ -71,6 +71,7 @@ npm run bootstrap
 - Artifact 导入与对比：支持粘贴 JSON 并比较标题、模式、章节、伏笔评分差异。
 - 章节编辑续写闭环：在 Web 里编辑章节后直接生成下一章 artifact。
 - 真实 LLM CLI 适配：`npm run cli -- provider-smoke "提示词"`，无 key 自动 mock fallback；`npm run cli -- provider-doctor` 输出脱敏配置诊断。
+- 章节版本树：`artifact-version-tree` 可把 outline/import/revision 组织成父子版本链，便于追踪多轮改稿。
 - 记忆卡片与关系图：artifact 内包含角色/伏笔/文风 graph。
 - 主题切换：light/dark/sepia/nord 四套主题，首页主区域可见。
 - GitHub Pages：`.github/workflows/pages.yml` 可部署 `apps/web` 静态工作台。
@@ -125,6 +126,7 @@ npm run cli -- artifact-latest .novel-ma/projects
 npm run cli -- artifact-search .novel-ma/projects 月球
 npm run cli -- artifact-search .novel-ma/projects 月球 --latest-only
 npm run cli -- artifact-search .novel-ma/projects 月球 --mode theme
+npm run cli -- artifact-version-tree .novel-ma/projects/<project-id>/artifact.json
 npm run cli -- artifact-diff .novel-ma/projects/<left>/artifact.json .novel-ma/projects/<right>/artifact.json --format text
 npm run cli -- artifact-prune .novel-ma/projects --keep 1
 ```

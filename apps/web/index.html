@@ -69,6 +69,12 @@
           <textarea id="compare-right" rows="5" placeholder="右侧 artifact JSON"></textarea>
           <button id="compare-pair" class="secondary">生成可读 Diff</button>
         </section>
+        <section>
+          <h2>导入项目库 Bundle</h2>
+          <textarea id="bundle-json" rows="6" placeholder="粘贴导出的项目库 Bundle JSON"></textarea>
+          <button id="import-bundle" class="secondary">合并到本地项目库</button>
+          <p class="hint">按 projectId 去重覆盖，坏条目会生成 issues，不中断导入。</p>
+        </section>
       </div>
       <section style="margin-top:18px">
         <h2>本地项目库</h2>
@@ -360,6 +366,11 @@
         render({ kind: 'artifact-diff', diff: compareArtifacts(currentArtifact, imported), imported });
       };
       document.getElementById('compare-pair').onclick = () => render({ kind: 'artifact-diff-report', ...compareImportedArtifacts(document.getElementById('compare-left').value, document.getElementById('compare-right').value) });
+      document.getElementById('import-bundle').onclick = () => {
+        const result = mergeLibraryBundle(library, document.getElementById('bundle-json').value);
+        renderLibrary();
+        render({ kind: 'library-import', ...result, total: library.list().length });
+      };
       download.onclick = () => {
         if (!currentArtifact) return;
         const blob = new Blob([JSON.stringify(currentArtifact, null, 2)], { type: 'application/json' });

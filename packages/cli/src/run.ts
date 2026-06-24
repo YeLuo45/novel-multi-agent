@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { runFullPipeline } from '@novel-ma/agents';
 import { createLLMProviderFromEnv, diagnoseLLMProviderConfig, saveProject, type LlmProviderConfigDiagnostic, type LlmResult, type NovelInput } from '@novel-ma/core';
-import { buildArtifactCatalog, buildArtifactMemoryGraph, buildLatestArtifactCatalog, compareArtifacts, compactArtifactCatalog, enrichArtifactCatalog, exportArtifactSchema, formatArtifactDiffReport, importArtifactJson, normalizeArtifactEnvelope, planArtifactPrune, searchArtifactCatalog, summarizeArtifact, assessContinuationQuality, type ArtifactCatalog, type ArtifactDiff, type ArtifactSearchResult, type ContinuationQualityReport, type LatestArtifactCatalog, type NormalizedArtifactEnvelope, type ArtifactSummary, type ArtifactPrunePlan } from '@novel-ma/core';
+import { buildArtifactCatalog, buildArtifactMemoryGraph, buildChapterVersionTree, buildLatestArtifactCatalog, compareArtifacts, compactArtifactCatalog, enrichArtifactCatalog, exportArtifactSchema, formatArtifactDiffReport, importArtifactJson, normalizeArtifactEnvelope, planArtifactPrune, searchArtifactCatalog, summarizeArtifact, assessContinuationQuality, type ArtifactCatalog, type ArtifactDiff, type ArtifactSearchResult, type ChapterVersion, type ChapterVersionTree, type ContinuationQualityReport, type LatestArtifactCatalog, type NormalizedArtifactEnvelope, type ArtifactSummary, type ArtifactPrunePlan } from '@novel-ma/core';
 
 export interface CliResult {
   projectId: string;
@@ -181,6 +181,33 @@ export async function runArtifactExport(args: string[], root = process.cwd()): P
   const file = args.find((arg) => !arg.startsWith('--'));
   if (!file) throw new Error('artifact-export command requires an artifact JSON file');
   return exportArtifactSchema(await readFile(resolveInputPath(file, root), 'utf8'), 'v2');
+}
+
+export async function runArtifactVersionTree(args: string[], root = process.cwd()): Promise<ChapterVersionTree> {
+  const file = args.find((arg) => !arg.startsWith('--'));
+  if (!file) throw new Error('artifact-version-tree command requires an artifact JSON file');
+  const artifact = importArtifactJson(await readFile(resolveInputPath(file, root), 'utf8'));
+  const versions: ChapterVersion[] = artifact.artifact.outline.map((chapter) => ({
+    id: `chapter-${chapter.number}-outline`,
+    chapterNumber: chapter.number,
+    title: chapter.title,
+    body: `${chapter.purpose}\n${chapter.conflict}`,
+    createdAt: '1970-01-01T00:00:00.000Z',
+    source: 'import',
+  }));
+  if (artifact.chapterTitle) {
+    const chapterNumber = artifact.artifact.outline[0]?.number ?? 1;
+    versions.push({
+      id: `chapter-${chapterNumber}-revision`,
+      parentId: `chapter-${chapterNumber}-outline`,
+      chapterNumber,
+      title: artifact.chapterTitle,
+      body: artifact.artifact.memory.chapterSummaries[0] ?? artifact.title,
+      createdAt: new Date().toISOString(),
+      source: 'revision',
+    });
+  }
+  return buildChapterVersionTree(versions);
 }
 
 export async function runArtifactPrune(args: string[], root = process.cwd()): Promise<ArtifactPrunePlan> {

@@ -33,6 +33,7 @@ npm run cli -- artifact-catalog .novel-ma/projects --enrich
 npm run cli -- artifact-latest .novel-ma/projects
 npm run cli -- artifact-search .novel-ma/projects 月球
 npm run cli -- artifact-search .novel-ma/projects 月球 --latest-only
+npm run cli -- artifact-version-tree .novel-ma/projects/<project-id>/artifact.json
 npm run cli -- artifact-diff .novel-ma/projects/<left>/artifact.json .novel-ma/projects/<right>/artifact.json --format text
 npm run cli -- artifact-prune .novel-ma/projects --keep 1
 ```
