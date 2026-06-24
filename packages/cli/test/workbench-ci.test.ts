@@ -201,6 +201,55 @@ describe('web workbench and ci scaffolding', () => {
     assert.ok(longform.sections.includes('volume-planning'));
     assert.ok(longform.sections.includes('chapter-version-tree'));
 
+    for (const fn of ['buildArtifactImportStudio', 'buildLongformProjectOS', 'buildQualityRepairLoop', 'buildProviderLiveRuntime', 'buildFlueWorkflowRunner', 'buildDesktopFileBridge', 'buildCollaborationPack', 'buildNarrativeAnalytics', 'buildPublishingPipeline', 'buildAgentStudio']) {
+      assert.equal(typeof workbench[fn], 'function', fn);
+    }
+
+    const importStudio = workbench.buildArtifactImportStudio(JSON.stringify(artifact), library.list());
+    assert.equal(importStudio.status, 'ready');
+    assert.ok(importStudio.schemaDiff.some((item: any) => item.field === 'schemaVersion'));
+    assert.equal(importStudio.rollbackToken.includes(artifact.projectId), true);
+
+    const projectOS = workbench.buildLongformProjectOS(library.list());
+    assert.ok(projectOS.volumes.length >= 1);
+    assert.ok(projectOS.ledger.foreshadowing.length >= 1);
+    assert.ok(projectOS.styleBible.tones.includes('克制、悬疑、带微光'));
+
+    const repairLoop = workbench.buildQualityRepairLoop(artifact, '陌生人穿过广场。');
+    assert.ok(repairLoop.actions.some((item: any) => item.kind === 'rewrite-suggestion'));
+    assert.ok(repairLoop.revisionDraft.includes('修复建议'));
+
+    const runtime = workbench.buildProviderLiveRuntime({ provider: 'openai-compatible', apiKey: 'sk-live', model: 'gpt-test', prompt: '续写' });
+    assert.equal(runtime.mode, 'live');
+    assert.equal(runtime.ready, true);
+    assert.ok(runtime.costEstimate.tokens > 0);
+
+    const runner = workbench.buildFlueWorkflowRunner(artifact);
+    assert.equal(runner.status, 'ready');
+    assert.equal(runner.timeline.map((item: any) => item.status).join(','), 'done,done,done,done,done,done,done');
+
+    const fileBridge = workbench.buildDesktopFileBridge('/novels/moon', library.list());
+    assert.ok(fileBridge.files.some((item: any) => item.name.endsWith('.json')));
+    assert.equal(fileBridge.offlineReady, true);
+
+    const collaboration = workbench.buildCollaborationPack(library.list(), 'editor-a');
+    assert.ok(collaboration.bundleId.startsWith('collab-'));
+    assert.ok(collaboration.reviewNotes.length >= 1);
+
+    const analytics = workbench.buildNarrativeAnalytics(library.list());
+    assert.ok(analytics.characterAppearances.length >= 1);
+    assert.ok(analytics.pacing.chapters >= 1);
+    assert.ok(analytics.visualDiagnostics.includes('foreshadowing-cycle'));
+
+    const publishing = workbench.buildPublishingPipeline(artifact, { format: 'epub' });
+    assert.equal(publishing.format, 'epub');
+    assert.ok(publishing.files.some((item: string) => item.endsWith('.epub')));
+    assert.ok(publishing.checks.every((item: any) => item.status === 'pass'));
+
+    const studio = workbench.buildAgentStudio(artifact);
+    assert.ok(studio.agents.map((item: any) => item.role).includes('writer'));
+    assert.ok(studio.trace.some((item: any) => item.artifactKey === 'draft'));
+
     const workflowPath = path.join(root, '.github/workflows/pages.yml');
     assert.equal(existsSync(workflowPath), true);
     const workflow = readFileSync(workflowPath, 'utf8');

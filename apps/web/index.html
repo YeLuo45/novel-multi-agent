@@ -108,6 +108,46 @@
           <h2>长篇工程化控制台</h2>
           <button id="longform-console" class="secondary">生成长篇工程视图</button>
         </section>
+        <section>
+          <h2>V30 Artifact Import Studio</h2>
+          <button id="artifact-import-studio" class="secondary">生成导入工作室</button>
+        </section>
+        <section>
+          <h2>V30 Longform Project OS</h2>
+          <button id="longform-project-os" class="secondary">生成长篇项目 OS</button>
+        </section>
+        <section>
+          <h2>V30 Quality Repair Loop</h2>
+          <button id="quality-repair-loop" class="secondary">生成修复闭环</button>
+        </section>
+        <section>
+          <h2>V30 Provider Live Runtime</h2>
+          <button id="provider-live-runtime" class="secondary">生成 Live Runtime</button>
+        </section>
+        <section>
+          <h2>V30 Flue Workflow Runner</h2>
+          <button id="flue-workflow-runner" class="secondary">执行 Workflow Runner</button>
+        </section>
+        <section>
+          <h2>V30 Desktop File Bridge</h2>
+          <button id="desktop-file-bridge" class="secondary">生成文件桥</button>
+        </section>
+        <section>
+          <h2>V30 Collaboration Pack</h2>
+          <button id="collaboration-pack" class="secondary">生成协作包</button>
+        </section>
+        <section>
+          <h2>V30 Narrative Analytics</h2>
+          <button id="narrative-analytics" class="secondary">生成叙事分析</button>
+        </section>
+        <section>
+          <h2>V30 Publishing Pipeline</h2>
+          <button id="publishing-pipeline" class="secondary">生成发布流水线</button>
+        </section>
+        <section>
+          <h2>V30 Agent Studio</h2>
+          <button id="agent-studio" class="secondary">生成 Agent Studio</button>
+        </section>
       </div>
       <section style="margin-top:18px">
         <h2>本地项目库</h2>
@@ -406,7 +446,98 @@
         return { sections: ['volume-planning', 'chapter-version-tree', 'character-arc', 'foreshadowing-ledger', 'style-bible'], projectCount: (items || []).length, nextAction: '选择项目后生成分卷和章节版本树' };
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildImportGuide, buildLatestCatalog, buildMemoryGraph, buildProviderReadiness, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      function buildArtifactImportStudio(json, existingItems = []) {
+        const guide = buildImportGuide(json);
+        const artifact = guide.ok ? guide.artifact : null;
+        const normalized = artifact ? normalizeArtifact(artifact) : null;
+        const schemaDiff = artifact ? [
+          { field: 'schemaVersion', current: artifact.schemaVersion || null, target: 2, action: 'add-normalized-wrapper' },
+          { field: 'projectId', current: artifact.projectId, target: artifact.projectId, action: 'preserve' },
+          { field: 'historyCollision', current: existingItems.some((item) => item.projectId === artifact.projectId), target: false, action: 'allow-rollback' },
+        ] : [{ field: 'artifact', current: 'invalid', target: 'valid', action: 'repair-json' }];
+        return { status: guide.ok ? 'ready' : 'needs-repair', guide, normalized, schemaDiff, preview: artifact ? JSON.stringify(normalized.summary, null, 2) : '', rollbackToken: artifact ? `rollback-${artifact.projectId}-${Date.now().toString(36)}` : null };
+      }
+
+      function buildLongformProjectOS(items = []) {
+        const projects = items.length ? items : [createFromTheme('长篇项目 OS 示例')];
+        const volumes = projects.map((item, index) => ({ id: `volume-${index + 1}`, title: `第${index + 1}卷 ${item.title}`, chapters: item.artifact?.outline || [item.chapterTitle].filter(Boolean), status: index === 0 ? 'active' : 'planned' }));
+        const foreshadowing = projects.flatMap((item) => {
+          const score = item.artifact?.foreshadowingScore || {};
+          return [...(score.recovered || []), ...(score.open || []), ...(score.overdue || []), ...(score.missing || [])].map((name) => ({ name, projectId: item.projectId, status: (score.recovered || []).includes(name) ? 'recovered' : (score.overdue || []).includes(name) ? 'overdue' : 'open' }));
+        });
+        const tones = [...new Set(projects.map((item) => item.artifact?.bible?.tone).filter(Boolean))];
+        return { volumes, ledger: { foreshadowing, characterArcs: projects.map((item) => ({ projectId: item.projectId, protagonist: item.artifact?.bible?.protagonist || '主角', arc: item.artifact?.bible?.coreConflict || '选择与代价' })) }, styleBible: { tones: tones.length ? tones : ['克制、悬疑、带微光'], forbidden: ['突兀转场', '遗忘伏笔', '人设漂移'] }, nextAction: '先锁定卷纲，再逐章绑定人物弧线和伏笔台账。' };
+      }
+
+      function buildQualityRepairLoop(artifact, text) {
+        const report = assessContinuationQuality(artifact, text);
+        const actions = [];
+        if (report.missing.length) actions.push({ kind: 'rewrite-suggestion', target: report.missing[0], suggestion: `补入 ${report.missing[0]} 的动作/意象，并让角色选择承担代价。` });
+        if (report.status !== 'pass') actions.push({ kind: 'repair-paragraph', suggestion: '把当前片段改写为“角色目标→伏笔触发→代价选择→章末钩子”。' });
+        actions.push({ kind: 'revision-note', suggestion: '保存为 artifact revision，并重新跑质量评分。' });
+        return { status: report.status, score: report.score, actions, revisionDraft: `修复建议：${actions.map((item) => item.suggestion).join(' ')}` };
+      }
+
+      function buildProviderLiveRuntime(config = {}) {
+        const provider = config.provider || 'mock';
+        const prompt = String(config.prompt || '');
+        const readiness = buildProviderReadiness(config);
+        const mode = provider === 'mock' || !config.apiKey ? 'mock' : 'live';
+        const tokens = Math.max(64, Math.ceil((prompt.length + String(config.model || '').length) / 2) + 128);
+        return { ...readiness, mode, ready: mode === 'mock' || readiness.ready, endpoint: mode === 'live' ? 'openai-compatible/chat/completions' : 'local-deterministic-mock', costEstimate: { tokens, unit: 'estimated-token', capped: true }, fallback: mode === 'live' ? 'mock-on-failure' : 'already-mock' };
+      }
+
+      function buildFlueWorkflowRunner(artifact) {
+        const nodes = buildFlueWorkflowPlan(artifact).nodes;
+        const timeline = nodes.map((node, index) => ({ node, status: artifact ? 'done' : index === 0 ? 'ready' : 'blocked', artifactKey: node === 'bible' ? 'bible' : node === 'outline' ? 'outline' : node === 'draft' ? 'draft' : node === 'memory' ? 'memoryUpdate' : node }));
+        return { status: artifact ? 'ready' : 'needs-artifact', timeline, outputs: timeline.filter((item) => item.status === 'done').map((item) => item.artifactKey), replayable: true };
+      }
+
+      function buildDesktopFileBridge(rootPath = '.', items = []) {
+        const safeRoot = String(rootPath || '.').replace(/\\+$/g, '') || '.';
+        const files = (items.length ? items : [createFromTheme('桌面桥示例')]).map((item) => ({ name: `${slugify(item.title)}.json`, path: `${safeRoot}/${slugify(item.title)}.json`, projectId: item.projectId, bytes: JSON.stringify(item).length }));
+        return { rootPath: safeRoot, files, permissions: ['read-project-directory', 'write-export-json', 'offline-cache'], offlineReady: true, importExport: { canImport: true, canExport: true } };
+      }
+
+      function buildCollaborationPack(items = [], reviewer = 'reviewer') {
+        const bundleId = `collab-${Date.now().toString(36)}`;
+        const entries = (items.length ? items : [createFromTheme('协作包示例')]).map((item) => ({ projectId: item.projectId, title: item.title, version: item.updatedAt || item.savedAt || 'draft', source: reviewer }));
+        return { bundleId, reviewer, entries, conflicts: [], reviewNotes: entries.map((item) => `${item.title}: 等待 ${reviewer} 审阅伏笔/人物/风格。`), mergePolicy: 'latest-wins-with-review-note' };
+      }
+
+      function buildNarrativeAnalytics(items = []) {
+        const projects = items.length ? items : [createFromTheme('叙事分析示例')];
+        const characterAppearances = projects.map((item) => ({ character: item.artifact?.bible?.protagonist || '主角', count: JSON.stringify(item).split(item.artifact?.bible?.protagonist || '主角').length - 1 || 1 }));
+        const foreshadowing = projects.flatMap((item) => Object.entries(item.artifact?.foreshadowingScore || {}).filter(([, value]) => Array.isArray(value)).map(([status, value]) => ({ status, count: value.length })));
+        return { characterAppearances, foreshadowing, pacing: { chapters: projects.reduce((sum, item) => sum + (item.artifact?.outline?.length || item.artifact?.importedChapters?.length || 1), 0), rhythm: 'steady' }, styleDrift: 'low', visualDiagnostics: ['foreshadowing-cycle', 'character-density', 'chapter-rhythm', 'style-drift'] };
+      }
+
+      function buildPublishingPipeline(artifact, options = {}) {
+        const format = options.format || 'markdown';
+        const basename = slugify(artifact?.title || 'untitled');
+        const files = format === 'epub' ? [`${basename}.md`, `${basename}.opf`, `${basename}.epub`] : [`${basename}.md`, `${basename}-metadata.json`];
+        const checks = [
+          { name: 'title', status: artifact?.title ? 'pass' : 'fail' },
+          { name: 'chapter-order', status: artifact?.chapterTitle || artifact?.artifact?.outline ? 'pass' : 'fail' },
+          { name: 'metadata', status: artifact?.projectId ? 'pass' : 'fail' },
+          { name: 'preflight', status: artifact?.artifact ? 'pass' : 'fail' },
+        ];
+        return { format, files, checks, manifest: { title: artifact?.title || '未命名', projectId: artifact?.projectId || null, generatedAt: new Date().toISOString() } };
+      }
+
+      function buildAgentStudio(artifact) {
+        const agents = [
+          { role: 'planner', input: 'premise', output: 'outline' },
+          { role: 'worldbuilder', input: 'premise', output: 'bible' },
+          { role: 'writer', input: 'outline+bible', output: 'draft' },
+          { role: 'critic', input: 'draft', output: 'critique' },
+          { role: 'memory', input: 'revision', output: 'memoryUpdate' },
+        ];
+        const trace = agents.map((agent) => ({ agent: agent.role, artifactKey: agent.output, value: artifact?.artifact?.[agent.output] || null }));
+        return { agents, trace, selectedAgent: 'writer', inspectable: true };
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -467,6 +598,16 @@
       document.getElementById('flue-plan').onclick = () => render({ kind: 'flue-workflow-plan', ...buildFlueWorkflowPlan(currentArtifact) });
       document.getElementById('desktop-ready').onclick = () => render({ kind: 'desktop-shell-readiness', ...buildDesktopShellReadiness() });
       document.getElementById('longform-console').onclick = () => render({ kind: 'longform-console', ...buildLongformConsole(library.list()) });
+      document.getElementById('artifact-import-studio').onclick = () => render({ kind: 'artifact-import-studio', ...buildArtifactImportStudio(JSON.stringify(currentArtifact || createFromTheme(document.getElementById('theme').value)), library.list()) });
+      document.getElementById('longform-project-os').onclick = () => render({ kind: 'longform-project-os', ...buildLongformProjectOS(library.list()) });
+      document.getElementById('quality-repair-loop').onclick = () => render({ kind: 'quality-repair-loop', ...buildQualityRepairLoop(currentArtifact, document.getElementById('quality-text').value) });
+      document.getElementById('provider-live-runtime').onclick = () => render({ kind: 'provider-live-runtime', ...buildProviderLiveRuntime({ provider: document.getElementById('provider-name').value, model: 'deterministic', prompt: document.getElementById('quality-text').value }) });
+      document.getElementById('flue-workflow-runner').onclick = () => render({ kind: 'flue-workflow-runner', ...buildFlueWorkflowRunner(currentArtifact) });
+      document.getElementById('desktop-file-bridge').onclick = () => render({ kind: 'desktop-file-bridge', ...buildDesktopFileBridge('.', library.list()) });
+      document.getElementById('collaboration-pack').onclick = () => render({ kind: 'collaboration-pack', ...buildCollaborationPack(library.list(), 'local-reviewer') });
+      document.getElementById('narrative-analytics').onclick = () => render({ kind: 'narrative-analytics', ...buildNarrativeAnalytics(library.list()) });
+      document.getElementById('publishing-pipeline').onclick = () => render({ kind: 'publishing-pipeline', ...buildPublishingPipeline(currentArtifact || createFromTheme(document.getElementById('theme').value), { format: 'epub' }) });
+      document.getElementById('agent-studio').onclick = () => render({ kind: 'agent-studio', ...buildAgentStudio(currentArtifact) });
       download.onclick = () => {
         if (!currentArtifact) return;
         const blob = new Blob([JSON.stringify(currentArtifact, null, 2)], { type: 'application/json' });

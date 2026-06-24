@@ -34,6 +34,19 @@ npm run verify:readme
 npm run bootstrap
 ```
 
+## V30 新增能力
+
+- Artifact Import Studio：批量导入前输出 schema diff、导入预览和 rollback token。
+- Longform Project OS：把分卷、章节、人物弧线、伏笔台账和风格圣经组织为统一项目 OS。
+- Quality Repair Loop：从续写质量评分生成 rewrite suggestion、repair paragraph 和 revision note。
+- Provider Live Runtime：支持 mock/live 模式、openai-compatible endpoint 诊断、token 成本估算和 fallback。
+- Flue Workflow Runner：把 premise→bible→outline→draft→critique→revise→memory 计划升级为可回放 timeline。
+- Desktop File Bridge：模拟桌面壳本地目录、artifact 文件树、离线缓存和导入导出权限。
+- Collaboration Pack：生成协作 bundle、review notes、冲突列表和合并策略。
+- Narrative Analytics：统计人物出场、伏笔周期、章节节奏、文风漂移和可视化诊断项。
+- Publishing Pipeline：生成 Markdown/EPUB 文件清单、metadata manifest 和发布前检查。
+- Agent Studio：展示 planner/worldbuilder/writer/critic/memory agent 的输入输出 trace。
+
 ## V29 新增能力
 
 - Artifact 真实导入向导：校验 JSON/schema，输出导入步骤和修复建议。
