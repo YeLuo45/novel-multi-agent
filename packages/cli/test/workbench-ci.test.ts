@@ -107,7 +107,7 @@ describe('web workbench and ci scaffolding', () => {
     };
     vm.runInNewContext(script, sandbox);
     const workbench = sandbox.window.NovelWorkbench;
-    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle']) {
+    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle']) {
       assert.equal(typeof workbench[fn], 'function', fn);
     }
 
@@ -158,6 +158,11 @@ describe('web workbench and ci scaffolding', () => {
     const mixedBundle = workbench.importLibraryBundle(JSON.stringify({ items: [artifact, { broken: true }] }));
     assert.equal(mixedBundle.items.length, 1);
     assert.equal(mixedBundle.issues.length, 1);
+    const mergeResult = workbench.mergeLibraryBundle(library, JSON.stringify({ items: [{ ...artifact, title: '覆盖后的星际茶馆' }, { ...imported, projectId: 'imported-id' }, { broken: true }] }));
+    assert.equal(mergeResult.imported, 2);
+    assert.equal(mergeResult.issues.length, 1);
+    assert.equal(library.load(artifact.projectId).title, '覆盖后的星际茶馆');
+    assert.equal(library.load('imported-id').title, imported.title);
 
     const workflowPath = path.join(root, '.github/workflows/pages.yml');
     assert.equal(existsSync(workflowPath), true);

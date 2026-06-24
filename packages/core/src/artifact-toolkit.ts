@@ -146,6 +146,27 @@ export interface ArtifactPrunePlan {
   backupManifest?: ArtifactPruneManifest;
 }
 
+export interface ChapterVersion {
+  id: string;
+  parentId?: string;
+  chapterNumber: number;
+  title: string;
+  body: string;
+  createdAt: string;
+  source: 'draft' | 'revision' | 'import';
+}
+
+export interface ChapterVersionNode extends ChapterVersion {
+  children: ChapterVersionNode[];
+}
+
+export interface ChapterVersionTree {
+  roots: ChapterVersionNode[];
+  nodesById: Record<string, ChapterVersionNode>;
+  latestByChapter: ChapterVersionNode[];
+  pathsByLeaf: Record<string, ChapterVersionNode[]>;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -514,4 +535,40 @@ export function assessContinuationQuality(artifactInput: NovelArtifactEnvelope |
     missing: { characters: charMatch.missing, foreshadowing: setupMatch.missing, style: styleMatch.missing },
     recommendations,
   };
+}
+
+function collectPathToRoot(node: ChapterVersionNode, nodesById: Record<string, ChapterVersionNode>): ChapterVersionNode[] {
+  const path: ChapterVersionNode[] = [node];
+  let current = node;
+  while (current.parentId && nodesById[current.parentId]) {
+    current = nodesById[current.parentId] as ChapterVersionNode;
+    path.unshift(current);
+  }
+  return path;
+}
+
+export function buildChapterVersionTree(versions: ChapterVersion[]): ChapterVersionTree {
+  const nodesById: Record<string, ChapterVersionNode> = {};
+  for (const version of versions) nodesById[version.id] = { ...version, children: [] };
+
+  const roots: ChapterVersionNode[] = [];
+  for (const node of Object.values(nodesById)) {
+    const parent = node.parentId ? nodesById[node.parentId] : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+
+  const sortByDate = (left: ChapterVersionNode, right: ChapterVersionNode): number => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+  for (const node of Object.values(nodesById)) node.children.sort(sortByDate);
+  roots.sort((left, right) => left.chapterNumber - right.chapterNumber || sortByDate(left, right));
+
+  const latestByChapter = [...Object.values(nodesById).reduce<Map<number, ChapterVersionNode>>((map, node) => {
+    const current = map.get(node.chapterNumber);
+    if (!current || sortByDate(current, node) <= 0) map.set(node.chapterNumber, node);
+    return map;
+  }, new Map()).values()].sort((left, right) => left.chapterNumber - right.chapterNumber);
+
+  const leaves = Object.values(nodesById).filter((node) => node.children.length === 0);
+  const pathsByLeaf = Object.fromEntries(leaves.map((leaf) => [leaf.id, collectPathToRoot(leaf, nodesById)]));
+  return { roots, nodesById, latestByChapter, pathsByLeaf };
 }

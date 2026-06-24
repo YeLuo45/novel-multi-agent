@@ -305,7 +305,13 @@
         return { items, issues };
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildLatestCatalog, buildMemoryGraph, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, normalizeArtifact, renderLatestCatalogPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      function mergeLibraryBundle(library, json) {
+        const imported = importLibraryBundle(json);
+        for (const item of imported.items) library.save(item);
+        return { imported: imported.items.length, issues: imported.issues };
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildLatestCatalog, buildMemoryGraph, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, renderLatestCatalogPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');

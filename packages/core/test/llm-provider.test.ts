@@ -41,4 +41,39 @@ describe('llm providers', () => {
     assert.equal(ready.model, 'story-model');
     assert.equal('apiKey' in ready, false);
   });
+
+  it('calls an OpenAI-compatible chat completions endpoint through injected fetch', async () => {
+    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
+    const provider = createOpenAICompatibleProvider({
+      apiKey: 'secret-token',
+      baseUrl: 'https://llm.example/v1/',
+      model: 'story-model',
+      fetchImpl: async (url, init) => {
+        calls.push({ url, headers: init.headers, body: init.body });
+        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '真实续写结果' } }] }) };
+      },
+    });
+
+    const result = await provider.complete({ prompt: '续写月球图书馆', temperature: 0.2 });
+
+    assert.equal(result.text, '真实续写结果');
+    assert.equal(result.provider, 'openai-compatible');
+    assert.equal(result.model, 'story-model');
+    assert.equal(calls[0]?.url, 'https://llm.example/v1/chat/completions');
+    assert.equal(calls[0]?.headers.Authorization, 'Bearer secret-token');
+    assert.equal(JSON.parse(calls[0]?.body ?? '{}').messages[0].content, '续写月球图书馆');
+  });
+
+  it('falls back when the OpenAI-compatible endpoint returns an error', async () => {
+    const primary = createOpenAICompatibleProvider({
+      apiKey: 'secret-token',
+      baseUrl: 'https://llm.example/v1',
+      model: 'story-model',
+      fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({ error: { message: 'busy' } }) }),
+    });
+    const result = await generateWithFallback(primary, createMockLlmProvider({ prefix: 'SAFE' }), { prompt: '降级续写' });
+    assert.equal(result.provider, 'mock');
+    assert.equal(result.usedFallback, true);
+    assert.ok(result.text.includes('降级续写'));
+  });
 });

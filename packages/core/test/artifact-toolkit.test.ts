@@ -5,6 +5,7 @@ import {
   buildArtifactCatalog,
   buildArtifactMemoryGraph,
   buildLatestArtifactCatalog,
+  buildChapterVersionTree,
   compactArtifactCatalog,
   compareArtifacts,
   enrichArtifactCatalog,
@@ -253,5 +254,19 @@ describe('artifact toolkit', () => {
     assert.ok(enriched.items[0]?.tags.includes('科幻'));
     assert.ok(enriched.items[0]?.tags.includes('theme'));
     assert.ok((enriched.items[0]?.qualityScore ?? 0) >= (enriched.items[1]?.qualityScore ?? 0));
+  });
+
+  it('builds a chapter version tree with parent-child revisions and latest leaves', () => {
+    const tree = buildChapterVersionTree([
+      { id: 'c1-draft', chapterNumber: 1, title: '第一章 草稿', body: '月背门厅', createdAt: '2026-06-24T00:00:00.000Z', source: 'draft' },
+      { id: 'c1-rev-a', parentId: 'c1-draft', chapterNumber: 1, title: '第一章 修订A', body: '月背门厅加强伏笔', createdAt: '2026-06-24T00:10:00.000Z', source: 'revision' },
+      { id: 'c1-rev-b', parentId: 'c1-rev-a', chapterNumber: 1, title: '第一章 修订B', body: '月背门厅加强伏笔与角色动机', createdAt: '2026-06-24T00:20:00.000Z', source: 'revision' },
+      { id: 'c2-draft', chapterNumber: 2, title: '第二章 草稿', body: '星图移动', createdAt: '2026-06-24T00:30:00.000Z', source: 'draft' },
+    ]);
+
+    assert.equal(tree.roots.length, 2);
+    assert.deepEqual(tree.latestByChapter.map((version) => version.id), ['c1-rev-b', 'c2-draft']);
+    assert.deepEqual(tree.pathsByLeaf['c1-rev-b']?.map((version) => version.id), ['c1-draft', 'c1-rev-a', 'c1-rev-b']);
+    assert.equal(tree.nodesById['c1-draft']?.children[0]?.id, 'c1-rev-a');
   });
 });
