@@ -164,6 +164,11 @@
           <p class="hint">TUI 从同一 action contract 镜像 Web 主流程。</p>
         </section>
         <section>
+          <h2>V33 Web Product Ops</h2>
+          <button id="web-product-ops" class="secondary">生成真数据工作流总览</button>
+          <p class="hint">真数据项目浏览器、Artifact 编辑器、质量 patch、Provider live request、Pages 验收计划。</p>
+        </section>
+        <section>
           <h2>TUI 模式预览</h2>
           <a href="../tui/" class="hint">打开 TUI 静态预览</a>
           <button id="tui-parity" class="secondary">生成 TUI 面板文本</button>
@@ -618,7 +623,42 @@
         return ['Interactive Shell', `Selected: ${shell.selectedAction.title}`, ...shell.menu.map((item) => `${item.active ? '>' : ' '} ${item.index}. ${item.label}`), 'Commands:', ...shell.commands.map((command) => `- ${command}`)].join('\n');
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      function buildRealProjectBrowser(entries) {
+        const projects = entries.filter((entry) => entry.artifact).map((entry) => ({ ...entry.artifact, sourcePath: entry.path }));
+        const issues = entries.filter((entry) => entry.error).map((entry) => ({ path: entry.path, error: entry.error }));
+        return { root: '.novel-ma/projects', projects, issues, commands: { open: 'novel-ma artifact-inspect <artifact.json>', catalog: 'novel-ma artifact-catalog .novel-ma/projects --enrich', search: 'novel-ma artifact-search .novel-ma/projects <query>' } };
+      }
+
+      function buildWebArtifactEditor(artifact) {
+        return { sections: ['chapters', 'characters', 'foreshadowing', 'style'], artifact, applyEdit: (edit) => ({ ...artifact, chapterTitle: edit.chapterTitle || artifact.chapterTitle, updatedAt: new Date(0).toISOString(), artifact: { ...(artifact.artifact || {}), characters: edit.character ? [...(artifact.artifact?.characters || []), edit.character] : artifact.artifact?.characters, foreshadowing: edit.foreshadowing ? [...(artifact.artifact?.foreshadowing || []), edit.foreshadowing] : artifact.artifact?.foreshadowing, style: edit.style ? [...(artifact.artifact?.style || []), edit.style] : artifact.artifact?.style } }) };
+      }
+
+      function generateQualityRewritePatch(artifact, prose) {
+        const missing = (artifact.artifact?.foreshadowing || []).filter((entry) => !String(entry).includes('recovered') && !prose.includes(String(entry).split(':')[0]));
+        return { status: missing.length ? 'needs-rewrite' : 'pass', missing, patchText: `修复建议：补入 ${missing.join('、') || '已回收伏笔'}`, revisionNote: `foreshadowing=${missing.length}` };
+      }
+
+      function buildTuiCommandRouter(contract = buildWebTuiSurfaceContract(), options = { projectPath: '<artifact.json>' }) {
+        return { routes: contract.actions.map((action) => ({ id: action.id, label: action.tui.label, command: action.id === 'continue' ? `novel-ma continue chapters.md --quality-artifact ${options.projectPath}` : action.cli.replace('<artifact.json>', options.projectPath) })) };
+      }
+
+      function buildProviderLiveRequest(config) {
+        return { method: 'POST', url: `${config.endpoint.replace(/\/$/, '')}/chat/completions`, headers: { Authorization: `Bearer sk-${String(config.apiKey || '').slice(-4)}`, 'Content-Type': 'application/json' }, body: { model: config.model, messages: [{ role: 'user', content: config.prompt }], stream: false }, provider: config.provider };
+      }
+
+      function buildPagesAcceptancePlan(baseUrl) {
+        const base = baseUrl.replace(/\/$/, '');
+        return { checks: [{ name: 'root', url: `${base}/`, marker: 'novel-multi-agent' }, { name: 'web', url: `${base}/apps/web/`, marker: 'V33 Web Product Ops' }, { name: 'tui', url: `${base}/apps/tui/`, marker: 'Interactive Shell' }], command: `curl -L ${base}/apps/web/ && curl -L ${base}/apps/tui/` };
+      }
+
+      function buildWebProductOps(items = library.list()) {
+        const seed = currentArtifact || createFromTheme(document.getElementById('theme').value);
+        const browser = buildRealProjectBrowser((items.length ? items : [seed]).map((item) => ({ path: `.novel-ma/projects/${item.projectId}/artifact.json`, artifact: item })));
+        const editor = buildWebArtifactEditor(seed);
+        return { kind: 'web-product-ops', title: 'V33 Web Product Ops', browser, editorSections: editor.sections, qualityPatch: generateQualityRewritePatch(seed, document.getElementById('quality-text').value), providerRequest: buildProviderLiveRequest({ provider: 'openai-compatible', model: 'gpt-live', endpoint: 'https://api.example.test/v1', apiKey: 'sk-local', prompt: '续写月背图书馆' }), tuiRouter: buildTuiCommandRouter(buildWebTuiSurfaceContract(), { projectPath: `.novel-ma/projects/${seed.projectId}/artifact.json` }), pagesPlan: buildPagesAcceptancePlan('https://yeluo45.github.io/novel-multi-agent/') };
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -692,6 +732,7 @@
       document.getElementById('mode-parity').onclick = () => render({ kind: 'mode-parity', matrix: buildModeParityMatrix(), panel: renderWebModeParityPanel() });
       document.getElementById('web-studio-hub').onclick = () => render(buildWebStudioHub());
       document.getElementById('tui-shell').onclick = () => render({ ...buildTuiInteractiveShell(), panel: renderTuiShellPanel() });
+      document.getElementById('web-product-ops').onclick = () => render(buildWebProductOps());
       document.getElementById('tui-parity').onclick = () => render({ kind: 'tui-mode-parity', panel: renderTuiModeParityPanel() });
       download.onclick = () => {
         if (!currentArtifact) return;

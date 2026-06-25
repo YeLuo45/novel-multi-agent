@@ -34,6 +34,15 @@ npm run verify:readme
 npm run bootstrap
 ```
 
+## V33 新增能力
+
+- Web 真数据项目浏览器：按 `.novel-ma/projects/<id>/artifact.json` 组织 artifact 路径、有效项目和坏文件 issues，并给出 inspect/catalog/search 命令。
+- Web Artifact Editor：把章节标题、人物、伏笔、风格做成可编辑模型，编辑后生成 revision history。
+- 质量修复 patch：根据未回收伏笔和当前正文生成 rewrite patch、missing 列表和 revision note。
+- TUI 命令路由：从 shared surface contract 生成可执行命令，`continue` 自动带 `--quality-artifact`。
+- Provider live request：Web 侧生成 OpenAI-compatible chat completions 请求计划，并脱敏 Authorization。
+- GitHub Pages 验收计划：生成 root、`/apps/web/`、`/apps/tui/` 的线上检查 URL 和 marker。
+
 ## V32 新增能力
 
 - Web-first Studio Hub：把 Dashboard、Artifact Library Pro、Continuation Studio、Provider Console、Narrative Analytics 收敛到首页主入口。

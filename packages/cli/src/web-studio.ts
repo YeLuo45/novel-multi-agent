@@ -195,3 +195,89 @@ export function renderWebStudioPanel(parts: { dashboard?: ReturnType<typeof buil
   if (parts.analytics) lines.push(`Risks: ${parts.analytics.risks.length}`);
   return lines.join('\n');
 }
+
+export function buildRealProjectBrowser(entries: Array<{ path: string; artifact?: StudioArtifact; error?: string }>) {
+  const projects = entries.filter((entry) => entry.artifact).map((entry) => ({ ...(entry.artifact as StudioArtifact), sourcePath: entry.path }));
+  const issues = entries.filter((entry) => entry.error).map((entry) => ({ path: entry.path, error: entry.error ?? 'unknown error' }));
+  return {
+    root: '.novel-ma/projects',
+    projects: latestFirst(projects),
+    issues,
+    commands: {
+      open: 'novel-ma artifact-inspect <artifact.json>',
+      catalog: 'novel-ma artifact-catalog .novel-ma/projects --enrich',
+      search: 'novel-ma artifact-search .novel-ma/projects <query>',
+    },
+  };
+}
+
+export function buildWebArtifactEditor(artifact: StudioArtifact) {
+  return {
+    sections: ['chapters', 'characters', 'foreshadowing', 'style'],
+    artifact,
+    applyEdit(edit: { chapterTitle?: string; character?: string; foreshadowing?: string; style?: string }): StudioArtifact {
+      const body = artifact.artifact ?? {};
+      return {
+        ...artifact,
+        chapterTitle: edit.chapterTitle ?? artifact.chapterTitle,
+        updatedAt: new Date(0).toISOString(),
+        artifact: {
+          ...body,
+          characters: edit.character ? [...(body.characters ?? []), edit.character] : body.characters,
+          foreshadowing: edit.foreshadowing ? [...(body.foreshadowing ?? []), edit.foreshadowing] : body.foreshadowing,
+          style: edit.style ? [...(body.style ?? []), edit.style] : body.style,
+        },
+      };
+    },
+  };
+}
+
+export function buildRevisionHistory(before: StudioArtifact, after: StudioArtifact, note: string) {
+  return {
+    entries: [{ id: `${before.projectId}-revision-1`, note, beforeTitle: before.chapterTitle ?? '', afterTitle: after.chapterTitle ?? '', changedAt: after.updatedAt ?? '' }],
+    latest: after,
+  };
+}
+
+export function generateQualityRewritePatch(artifact: StudioArtifact, prose: string) {
+  const foreshadowing = foreshadowingItems(artifact);
+  const missing = foreshadowing.filter((item) => item.status !== 'recovered' && !prose.includes(item.name));
+  return {
+    status: missing.length ? 'needs-rewrite' : 'pass',
+    missing: missing.map((item) => item.name),
+    patchText: `修复建议：补入 ${missing.map((item) => item.name).join('、') || '已回收伏笔'}，并保持 ${artifact.artifact?.style?.[0] ?? '既有风格'}。`,
+    revisionNote: `foreshadowing=${missing.length}; style=${artifact.artifact?.style?.length ?? 0}`,
+  };
+}
+
+export function buildTuiCommandRouter(contract = buildWebTuiSurfaceContract(), options: { projectPath: string }) {
+  return {
+    routes: contract.actions.map((action) => ({
+      id: action.id,
+      label: action.tui.label,
+      command: action.id === 'continue' ? `novel-ma continue chapters.md --quality-artifact ${options.projectPath}` : action.cli.replace('<artifact.json>', options.projectPath),
+    })),
+  };
+}
+
+export function buildProviderLiveRequest(config: { provider: string; model: string; endpoint: string; apiKey: string; prompt: string }) {
+  return {
+    method: 'POST',
+    url: `${config.endpoint.replace(/\/$/, '')}/chat/completions`,
+    headers: { Authorization: `Bearer sk-${config.apiKey.slice(-4)}`, 'Content-Type': 'application/json' },
+    body: { model: config.model, messages: [{ role: 'user', content: config.prompt }], stream: false },
+    provider: config.provider,
+  };
+}
+
+export function buildPagesAcceptancePlan(baseUrl: string) {
+  const base = baseUrl.replace(/\/$/, '');
+  return {
+    checks: [
+      { name: 'root', url: `${base}/`, marker: 'novel-multi-agent' },
+      { name: 'web', url: `${base}/apps/web/`, marker: 'V32 Web-first Studio Hub' },
+      { name: 'tui', url: `${base}/apps/tui/`, marker: 'Interactive Shell' },
+    ],
+    command: `curl -L ${base}/apps/web/ && curl -L ${base}/apps/tui/`,
+  };
+}

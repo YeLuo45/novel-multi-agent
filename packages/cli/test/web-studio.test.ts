@@ -3,11 +3,18 @@ import { describe, it } from 'node:test';
 import {
   buildContinuationStudio,
   buildNarrativeAnalyticsDashboard,
+  buildPagesAcceptancePlan,
   buildProviderConsole,
+  buildProviderLiveRequest,
+  buildRealProjectBrowser,
+  buildRevisionHistory,
+  buildTuiCommandRouter,
   buildTuiInteractiveShell,
+  buildWebArtifactEditor,
   buildWebArtifactLibrary,
   buildWebProjectDashboard,
   buildWebTuiSurfaceContract,
+  generateQualityRewritePatch,
   renderTuiShellPanel,
   renderWebStudioPanel,
 } from '../src/web-studio.js';
@@ -109,5 +116,51 @@ describe('web-first studio models', () => {
     assert.equal(shell.selectedAction?.id, 'continue');
     assert.ok(shell.commands.some((command) => command.includes('novel-ma continue')));
     assert.ok(renderTuiShellPanel(shell).includes('Interactive Shell'));
+  });
+
+  it('builds a real project browser from artifact paths and invalid entries', () => {
+    const browser = buildRealProjectBrowser([
+      { path: '.novel-ma/projects/moon-1/artifact.json', artifact: sampleArtifacts[0] },
+      { path: '.novel-ma/projects/bad/artifact.json', error: 'invalid json' },
+    ]);
+
+    assert.equal(browser.root, '.novel-ma/projects');
+    assert.equal(browser.projects.length, 1);
+    assert.equal(browser.issues.length, 1);
+    assert.equal(browser.projects[0]?.sourcePath.includes('moon-1'), true);
+    assert.ok(browser.commands.open.includes('artifact-inspect'));
+  });
+
+  it('builds editable artifact forms and revision history', () => {
+    const editor = buildWebArtifactEditor(sampleArtifacts[0]!);
+    const edited = editor.applyEdit({ chapterTitle: '第1章 银匙归来', character: '馆长：掌管门禁', foreshadowing: '门禁钟:open', style: '冷光叙事' });
+    const history = buildRevisionHistory(sampleArtifacts[0]!, edited, 'boss edit');
+
+    assert.equal(editor.sections.includes('characters'), true);
+    assert.equal(edited.chapterTitle, '第1章 银匙归来');
+    assert.ok(edited.artifact?.characters?.some((item) => item.includes('馆长')));
+    assert.ok(edited.artifact?.foreshadowing?.includes('门禁钟:open'));
+    assert.ok(history.entries[0]?.note.includes('boss edit'));
+  });
+
+  it('generates quality rewrite patch and executable TUI command routes', () => {
+    const patch = generateQualityRewritePatch(sampleArtifacts[0]!, '陌生人穿过广场。');
+    const router = buildTuiCommandRouter(buildWebTuiSurfaceContract(), { projectPath: '.novel-ma/projects/moon-1/artifact.json' });
+
+    assert.equal(patch.status, 'needs-rewrite');
+    assert.ok(patch.patchText.includes('修复建议'));
+    assert.ok(patch.revisionNote.includes('foreshadowing'));
+    assert.ok(router.routes.some((route) => route.id === 'continue' && route.command.includes('quality-artifact')));
+  });
+
+  it('plans provider live requests and GitHub Pages acceptance checks', () => {
+    const request = buildProviderLiveRequest({ provider: 'openai-compatible', model: 'gpt-live', endpoint: 'https://api.example.test/v1', apiKey: 'sk-secret', prompt: '续写月背图书馆' });
+    const plan = buildPagesAcceptancePlan('https://yeluo45.github.io/novel-multi-agent/');
+
+    assert.equal(request.method, 'POST');
+    assert.equal(request.headers.Authorization.includes('secret'), false);
+    assert.ok(request.body.messages[0]?.content.includes('续写月背图书馆'));
+    assert.ok(plan.checks.some((check) => check.url.endsWith('/apps/web/')));
+    assert.ok(plan.checks.some((check) => check.url.endsWith('/apps/tui/')));
   });
 });
