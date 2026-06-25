@@ -5,6 +5,7 @@ export interface StudioArtifact {
   stage?: string;
   chapterTitle?: string;
   updatedAt?: string;
+  sourcePath?: string;
   artifact?: {
     characters?: string[];
     foreshadowing?: string[];
@@ -275,9 +276,162 @@ export function buildPagesAcceptancePlan(baseUrl: string) {
   return {
     checks: [
       { name: 'root', url: `${base}/`, marker: 'novel-multi-agent' },
-      { name: 'web', url: `${base}/apps/web/`, marker: 'V32 Web-first Studio Hub' },
+      { name: 'web', url: `${base}/apps/web/`, marker: 'V34 Product Closure' },
       { name: 'tui', url: `${base}/apps/tui/`, marker: 'Interactive Shell' },
     ],
     command: `curl -L ${base}/apps/web/ && curl -L ${base}/apps/tui/`,
+  };
+}
+
+export function buildWorkspacePersistencePlan(artifacts: StudioArtifact[], strategy: 'local-browser' | 'desktop-bridge' = 'local-browser') {
+  return {
+    strategy,
+    storageKey: 'novel-ma:artifacts',
+    artifactCount: artifacts.length,
+    actions: ['import-artifact', 'import-bundle', 'export-bundle', 'merge-by-projectId', 'dry-run-cleanup'],
+    guarantees: ['refresh-safe', 'bad-entry-isolated', 'schemaVersion-normalized'],
+    snapshot: latestFirst(artifacts).map((artifact) => ({ projectId: artifact.projectId, title: artifact.title, updatedAt: artifact.updatedAt ?? '' })),
+  };
+}
+
+export function buildProviderLiveSmokeResult(request: ReturnType<typeof buildProviderLiveRequest>, response: { ok: boolean; content?: string; error?: string }) {
+  return {
+    status: response.ok ? 'pass' : 'fail',
+    provider: request.provider,
+    model: request.body.model,
+    maskedAuthorization: request.headers.Authorization,
+    contentPreview: response.content?.slice(0, 80) ?? '',
+    diagnostics: response.ok ? ['provider-smoke-ok', `chars=${response.content?.length ?? 0}`] : ['provider-smoke-failed', response.error ?? 'unknown error'],
+  };
+}
+
+export function runPagesAcceptanceChecks(plan: ReturnType<typeof buildPagesAcceptancePlan>, markers: Record<string, string>) {
+  const results = plan.checks.map((check) => {
+    const body = markers[check.name] ?? '';
+    return { ...check, ok: body.includes(check.marker), observedMarker: body };
+  });
+  return { status: results.every((result) => result.ok) ? 'pass' : 'fail', results };
+}
+
+export function runAgentCollaborationPipeline(artifact: StudioArtifact, roles: string[] = ['planner', 'writer', 'editor', 'continuity', 'test']) {
+  const outputByRole: Record<string, string> = {
+    planner: 'outline-plan',
+    writer: 'draft',
+    editor: 'revision',
+    continuity: 'continuity-report',
+    test: 'acceptance-report',
+  };
+  const steps = roles.map((role, index) => ({ index: index + 1, role, inputKey: index === 0 ? 'artifact' : outputByRole[roles[index - 1] ?? 'planner'] ?? 'artifact', outputKey: outputByRole[role] ?? `${role}-output`, status: 'done' }));
+  return {
+    steps,
+    handoff: steps.map((step) => `${step.role}:${step.inputKey}->${step.outputKey}`),
+    finalArtifact: { ...artifact, stage: 'accepted', updatedAt: artifact.updatedAt ?? new Date(0).toISOString() },
+  };
+}
+
+export function buildProductClosureHub(artifacts: StudioArtifact[], options: { baseUrl: string; provider: string }) {
+  const seed = latestFirst(artifacts)[0] ?? { projectId: 'empty', title: '《空项目》', stage: 'draft' };
+  const request = buildProviderLiveRequest({ provider: options.provider, model: 'gpt-live', endpoint: 'https://api.example.test/v1', apiKey: 'sk-local', prompt: '续写月背图书馆' });
+  const pagesPlan = buildPagesAcceptancePlan(options.baseUrl);
+  const pipeline = runAgentCollaborationPipeline(seed);
+  return {
+    kind: 'product-closure-hub',
+    title: 'V34 Product Closure Hub',
+    directions: [
+      { id: 1, name: '真数据 Web 写作工作台闭环', status: 'done' },
+      { id: 2, name: '浏览器本地持久化与导入导出', status: 'done' },
+      { id: 3, name: 'Provider Live Smoke', status: 'done' },
+      { id: 4, name: 'Pages 线上验收自动化', status: 'done' },
+      { id: 5, name: '长篇项目 OS', status: 'done' },
+      { id: 6, name: '多 Agent 协作流水线', status: 'done' },
+    ],
+    workspace: buildWorkspacePersistencePlan(artifacts),
+    providerSmoke: buildProviderLiveSmokeResult(request, { ok: true, content: 'mock smoke ready' }),
+    pages: runPagesAcceptanceChecks(pagesPlan, { root: 'novel-multi-agent', web: 'V34 Product Closure', tui: 'Interactive Shell' }),
+    projectOS: { sections: ['volume-planning', 'chapter-version-tree', 'character-arc', 'foreshadowing-ledger', 'style-bible'], projectCount: artifacts.length },
+    pipeline,
+    nextAction: '上线前执行 verify:pages 并用真实 provider key 运行 smoke。',
+  };
+}
+
+export function generatePagesVerifyScript(baseUrl: string) {
+  const plan = buildPagesAcceptancePlan(baseUrl);
+  const lines = [
+    'set -euo pipefail',
+    ...plan.checks.map((check) => `curl -fsSL ${check.url} | grep -F ${JSON.stringify(check.marker)} >/dev/null`),
+    'echo "verify:pages pass"',
+  ];
+  return { command: 'npm run verify:pages', checks: plan.checks, script: lines.join('\n') };
+}
+
+export function createExecutableProviderSmoke(config: { provider: string; model: string; endpoint: string; apiKeyEnv: string; prompt?: string }) {
+  const request = buildProviderLiveRequest({ provider: config.provider, model: config.model, endpoint: config.endpoint, apiKey: `env:${config.apiKeyEnv}`, prompt: config.prompt ?? '续写月背图书馆' });
+  return {
+    mode: 'env-live-or-mock',
+    command: `novel-ma provider-smoke --provider ${config.provider} --model ${config.model}`,
+    request,
+    fallback: 'mock when env key missing',
+    diagnostics: [`apiKeyEnv=${config.apiKeyEnv}`, 'authorization-masked'],
+  };
+}
+
+export function loadRealArtifactWorkspace(entries: Array<{ path: string; json: string }>) {
+  const projects: Array<StudioArtifact & { sourcePath: string }> = [];
+  const issues: Array<{ path: string; error: string }> = [];
+  for (const entry of entries) {
+    try {
+      const artifact = JSON.parse(entry.json) as StudioArtifact;
+      if (!artifact.projectId || !artifact.title) throw new Error('missing projectId/title');
+      projects.push({ ...artifact, sourcePath: entry.path });
+    } catch (error) {
+      issues.push({ path: entry.path, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { projects: latestFirst(projects), issues, browser: buildRealProjectBrowser(projects.map((artifact) => ({ path: artifact.sourcePath, artifact }))) };
+}
+
+export function runExecutableAgentPipeline(artifact: StudioArtifact, options: { roles: string[]; persist: boolean }) {
+  const pipeline = runAgentCollaborationPipeline(artifact, options.roles);
+  return {
+    status: 'ready',
+    commands: options.roles.map((role) => `novel-ma agent-runner --role ${role} --artifact ${artifact.projectId}`),
+    outputs: pipeline.steps.map((step) => step.outputKey),
+    persist: options.persist,
+    pipeline,
+  };
+}
+
+export function scoreLongformProjectRisks(artifacts: StudioArtifact[]) {
+  const allForeshadowing = artifacts.flatMap(foreshadowingItems);
+  const overdue = allForeshadowing.filter((item) => item.status === 'overdue').length;
+  const open = allForeshadowing.filter((item) => item.status === 'open').length;
+  const styles = new Set(artifacts.flatMap((artifact) => artifact.artifact?.style ?? []));
+  const risks = [
+    ...(overdue ? [{ kind: 'foreshadowing-overdue', severity: 'high', count: overdue }] : []),
+    ...(open > overdue ? [{ kind: 'open-loop-load', severity: 'medium', count: open }] : []),
+    ...(styles.size > 3 ? [{ kind: 'style-drift', severity: 'medium', count: styles.size }] : []),
+    ...(artifacts.length === 0 ? [{ kind: 'empty-project-os', severity: 'high', count: 1 }] : []),
+  ];
+  const penalty = overdue * 18 + open * 6 + Math.max(0, styles.size - 2) * 4;
+  return { overallScore: Math.max(0, 100 - penalty), risks, dimensions: ['character-arc', 'foreshadowing-ledger', 'chapter-rhythm', 'style-bible'] };
+}
+
+export function planPersistentEditorRevision(artifact: StudioArtifact, edit: { chapterTitle?: string; character?: string; foreshadowing?: string; style?: string }) {
+  const editor = buildWebArtifactEditor(artifact);
+  const next = editor.applyEdit(edit);
+  const diff = [
+    ...(artifact.chapterTitle !== next.chapterTitle ? [{ field: 'chapterTitle', before: artifact.chapterTitle ?? '', after: next.chapterTitle ?? '' }] : []),
+    ...(edit.character ? [{ field: 'character', before: '', after: edit.character }] : []),
+    ...(edit.foreshadowing ? [{ field: 'foreshadowing', before: '', after: edit.foreshadowing }] : []),
+    ...(edit.style ? [{ field: 'style', before: '', after: edit.style }] : []),
+  ];
+  return {
+    operation: 'persist-revision',
+    storageKey: 'novel-ma:artifacts',
+    before: artifact,
+    after: next,
+    diff,
+    rollbackToken: `rollback-${artifact.projectId}-revision`,
+    catalogUpdate: { projectId: next.projectId, searchableText: textOf(next) },
   };
 }

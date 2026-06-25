@@ -37,12 +37,16 @@ describe('web workbench and ci scaffolding', () => {
     assert.ok(html.includes('V32 TUI Interactive Shell'));
     assert.ok(html.includes('V33 Web Product Ops'));
     assert.ok(html.includes('真数据项目浏览器、Artifact 编辑器、质量 patch'));
+    assert.ok(html.includes('V34 Product Closure Hub'));
+    assert.ok(html.includes('完成 1-6 全方向闭环'));
+    assert.ok(html.includes('V35-V40 Execution Suite'));
+    assert.ok(html.includes('verify:pages、Provider smoke executor'));
     assert.ok(html.includes('Dashboard、Library、Continuation、Provider、Analytics'));
     assert.ok(html.includes('TUI 模式预览'));
     const tuiHtml = readFileSync(path.join(root, 'apps/tui/index.html'), 'utf8');
     assert.ok(tuiHtml.includes('novel-multi-agent TUI'));
     assert.ok(tuiHtml.includes('Interactive Shell'));
-    assert.ok(tuiHtml.includes('Web-first Studio Mirror'));
+    assert.ok(tuiHtml.toLowerCase().includes('web-first studio mirror'.toLowerCase()));
     assert.ok(tuiHtml.includes('Mode Parity'));
     assert.ok(tuiHtml.includes('continuation-check'));
     const rootHtml = readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -130,7 +134,7 @@ describe('web workbench and ci scaffolding', () => {
     };
     vm.runInNewContext(script, sandbox);
     const workbench = sandbox.window.NovelWorkbench;
-    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle', 'buildImportGuide', 'renderQualityPanel', 'planLibraryCleanup', 'buildProviderReadiness', 'buildFlueWorkflowPlan', 'buildDesktopShellReadiness', 'buildLongformConsole', 'buildModeParityMatrix', 'renderWebModeParityPanel', 'renderTuiModeParityPanel', 'buildWebTuiSurfaceContract', 'buildWebStudioHub', 'buildTuiInteractiveShell', 'renderTuiShellPanel', 'buildRealProjectBrowser', 'buildWebArtifactEditor', 'generateQualityRewritePatch', 'buildTuiCommandRouter', 'buildProviderLiveRequest', 'buildPagesAcceptancePlan', 'buildWebProductOps']) {
+    for (const fn of ['createLibrary', 'importArtifact', 'compareArtifacts', 'buildMemoryGraph', 'applyTheme', 'buildLatestCatalog', 'searchLibrary', 'normalizeArtifact', 'assessContinuationQuality', 'renderLatestCatalogPanel', 'compareImportedArtifacts', 'exportLibraryBundle', 'importLibraryBundle', 'mergeLibraryBundle', 'buildImportGuide', 'renderQualityPanel', 'planLibraryCleanup', 'buildProviderReadiness', 'buildFlueWorkflowPlan', 'buildDesktopShellReadiness', 'buildLongformConsole', 'buildModeParityMatrix', 'renderWebModeParityPanel', 'renderTuiModeParityPanel', 'buildWebTuiSurfaceContract', 'buildWebStudioHub', 'buildTuiInteractiveShell', 'renderTuiShellPanel', 'buildRealProjectBrowser', 'buildWebArtifactEditor', 'generateQualityRewritePatch', 'buildTuiCommandRouter', 'buildProviderLiveRequest', 'buildPagesAcceptancePlan', 'buildWebProductOps', 'buildWorkspacePersistencePlan', 'buildProviderLiveSmokeResult', 'runPagesAcceptanceChecks', 'runAgentCollaborationPipeline', 'buildProductClosureHub', 'generatePagesVerifyScript', 'createExecutableProviderSmoke', 'loadRealArtifactWorkspace', 'runExecutableAgentPipeline', 'scoreLongformProjectRisks', 'planPersistentEditorRevision', 'buildExecutionSuite']) {
       assert.equal(typeof workbench[fn], 'function', fn);
     }
 

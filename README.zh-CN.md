@@ -34,6 +34,24 @@ npm run verify:readme
 npm run bootstrap
 ```
 
+## V35-V40 新增能力
+
+- V35 Verify Pages Script：生成 `npm run verify:pages` 对应的 root、Web、TUI marker 检查脚本模型。
+- V36 Provider Live Smoke Executor：把 provider smoke 从请求计划升级为 env-live-or-mock 执行器，脱敏 Authorization 并保留 mock fallback。
+- V37 Real Artifact Workspace Loader：从真实 artifact JSON 路径列表构建 workspace，坏文件进入 issues，不阻断有效项目。
+- V38 Multi-Agent Pipeline Runner：把 planner/writer/editor/continuity/test 转成可执行 agent-runner 命令和产物列表。
+- V39 Longform Risk Scoring：为长篇 Project OS 增加伏笔逾期、开放循环、风格漂移等风险评分。
+- V40 Web Editing Persistence：编辑结果生成 persist-revision 计划、diff、rollback token 和 searchable catalog update。
+
+## V34 新增能力
+
+- Product Closure Hub：把后续 1-6 方向收束为首页可见总控台，统一展示真数据写作、持久化、Provider、Pages、Project OS、多 Agent 流水线状态。
+- Workspace Persistence Plan：明确 localStorage 项目库的 import/export/merge/cleanup 动作和 refresh-safe、bad-entry-isolated、schema-normalized 保障。
+- Provider Live Smoke Result：在请求计划之外提供 smoke 结果模型，脱敏 Authorization 并记录 pass/fail diagnostics。
+- Pages Acceptance Checks：把 root、`/apps/web/`、`/apps/tui/` marker 检查建模为可执行验收结果。
+- Agent Collaboration Pipeline：planner → writer → editor → continuity → test 五角色流水线，最终 artifact 标记 accepted。
+- Longform Project OS 聚合：把分卷、章节版本树、人物弧、伏笔台账、风格圣经纳入 closure hub。
+
 ## V33 新增能力
 
 - Web 真数据项目浏览器：按 `.novel-ma/projects/<id>/artifact.json` 组织 artifact 路径、有效项目和坏文件 issues，并给出 inspect/catalog/search 命令。

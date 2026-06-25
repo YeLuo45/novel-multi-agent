@@ -4,8 +4,10 @@ import {
   buildContinuationStudio,
   buildNarrativeAnalyticsDashboard,
   buildPagesAcceptancePlan,
+  buildProductClosureHub,
   buildProviderConsole,
   buildProviderLiveRequest,
+  buildProviderLiveSmokeResult,
   buildRealProjectBrowser,
   buildRevisionHistory,
   buildTuiCommandRouter,
@@ -14,7 +16,16 @@ import {
   buildWebArtifactLibrary,
   buildWebProjectDashboard,
   buildWebTuiSurfaceContract,
+  buildWorkspacePersistencePlan,
+  createExecutableProviderSmoke,
+  generatePagesVerifyScript,
   generateQualityRewritePatch,
+  loadRealArtifactWorkspace,
+  planPersistentEditorRevision,
+  runAgentCollaborationPipeline,
+  runExecutableAgentPipeline,
+  runPagesAcceptanceChecks,
+  scoreLongformProjectRisks,
   renderTuiShellPanel,
   renderWebStudioPanel,
 } from '../src/web-studio.js';
@@ -162,5 +173,56 @@ describe('web-first studio models', () => {
     assert.ok(request.body.messages[0]?.content.includes('续写月背图书馆'));
     assert.ok(plan.checks.some((check) => check.url.endsWith('/apps/web/')));
     assert.ok(plan.checks.some((check) => check.url.endsWith('/apps/tui/')));
+  });
+
+  it('builds V34 product closure hub across persistence smoke pages project OS and agents', () => {
+    const persistence = buildWorkspacePersistencePlan(sampleArtifacts, 'local-browser');
+    const smoke = buildProviderLiveSmokeResult(buildProviderLiveRequest({ provider: 'openai-compatible', model: 'gpt-live', endpoint: 'https://api.example.test/v1', apiKey: 'sk-secret', prompt: '续写月背图书馆' }), { ok: true, content: '月背图书馆继续亮起。' });
+    const pages = runPagesAcceptanceChecks(buildPagesAcceptancePlan('https://yeluo45.github.io/novel-multi-agent/'), { root: 'novel-multi-agent', web: 'V34 Product Closure', tui: 'Interactive Shell' });
+    const pipeline = runAgentCollaborationPipeline(sampleArtifacts[0]!, ['planner', 'writer', 'editor', 'continuity', 'test']);
+    const hub = buildProductClosureHub(sampleArtifacts, { baseUrl: 'https://yeluo45.github.io/novel-multi-agent/', provider: 'openai-compatible' });
+
+    assert.equal(persistence.strategy, 'local-browser');
+    assert.ok(persistence.actions.includes('import-bundle'));
+    assert.ok(persistence.actions.includes('export-bundle'));
+    assert.equal(smoke.status, 'pass');
+    assert.equal(smoke.maskedAuthorization.includes('secret'), false);
+    assert.equal(pages.status, 'pass');
+    assert.ok(pages.results.every((item) => item.ok));
+    assert.deepEqual(pipeline.steps.map((step) => step.role), ['planner', 'writer', 'editor', 'continuity', 'test']);
+    assert.equal(pipeline.finalArtifact.stage, 'accepted');
+    assert.equal(hub.kind, 'product-closure-hub');
+    assert.equal(hub.directions.length, 6);
+    assert.ok(hub.projectOS.sections.includes('foreshadowing-ledger'));
+    assert.ok(hub.pipeline.steps.some((step) => step.outputKey === 'continuity-report'));
+  });
+
+  it('builds V35-V40 executable closure primitives for pages provider workspace agents risks and editor persistence', () => {
+    const verifyScript = generatePagesVerifyScript('https://yeluo45.github.io/novel-multi-agent/');
+    const smokeExecutor = createExecutableProviderSmoke({ provider: 'openai-compatible', model: 'gpt-live', endpoint: 'https://api.example.test/v1', apiKeyEnv: 'NOVEL_MA_API_KEY' });
+    const workspace = loadRealArtifactWorkspace([
+      { path: '.novel-ma/projects/moon-1/artifact.json', json: JSON.stringify(sampleArtifacts[0]) },
+      { path: '.novel-ma/projects/bad/artifact.json', json: '{bad json' },
+    ]);
+    const executablePipeline = runExecutableAgentPipeline(sampleArtifacts[0]!, { roles: ['planner', 'writer', 'editor', 'continuity', 'test'], persist: true });
+    const risks = scoreLongformProjectRisks(sampleArtifacts);
+    const revision = planPersistentEditorRevision(sampleArtifacts[0]!, { chapterTitle: '第1章 银匙归来', character: '馆长：掌管门禁' });
+
+    assert.ok(verifyScript.command.includes('verify:pages'));
+    assert.ok(verifyScript.script.includes('V34 Product Closure'));
+    assert.equal(smokeExecutor.mode, 'env-live-or-mock');
+    assert.equal(smokeExecutor.request.headers.Authorization.includes('NOVEL_MA_API_KEY'), false);
+    assert.ok(smokeExecutor.command.includes('provider-smoke'));
+    assert.equal(workspace.projects.length, 1);
+    assert.equal(workspace.issues.length, 1);
+    assert.ok(workspace.browser.projects[0]?.sourcePath.endsWith('artifact.json'));
+    assert.equal(executablePipeline.status, 'ready');
+    assert.ok(executablePipeline.commands.some((command) => command.includes('agent-runner')));
+    assert.ok(executablePipeline.outputs.includes('acceptance-report'));
+    assert.ok(risks.overallScore < 100);
+    assert.ok(risks.risks.some((risk) => risk.kind === 'foreshadowing-overdue'));
+    assert.equal(revision.operation, 'persist-revision');
+    assert.ok(revision.diff.some((item) => item.field === 'chapterTitle'));
+    assert.ok(revision.catalogUpdate.searchableText.includes('馆长'));
   });
 });
