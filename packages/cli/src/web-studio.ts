@@ -298,6 +298,167 @@ export interface ChapterPacingSvg {
   height: number;
 }
 
+export interface RevisionNode {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  label: string;
+  wordCount: number;
+  savedAt: string;
+  children: RevisionNode[];
+}
+
+export interface TagIndex {
+  tags: string[];
+  byProject: Record<string, string[]>;
+  byTag: Record<string, string[]>;
+}
+
+export interface SearchHit {
+  projectId: string;
+  title: string;
+  score: number;
+  matchedFields: string[];
+  excerpt: string;
+}
+
+export interface IndexedDbMigrationPlan {
+  storageKey: string;
+  objectStoreName: string;
+  indexName: string;
+  recordCount: number;
+  estimatedBytes: number;
+  warnings: string[];
+  ready: boolean;
+}
+
+export function buildRevisionTree(items: StudioArtifact[]): RevisionNode[] {
+  const byProject = new Map<string, StudioArtifact[]>();
+  const withSavedAt = items as Array<StudioArtifact & { savedAt?: string }>;
+  for (const item of withSavedAt) {
+    const list = byProject.get(item.projectId) ?? [];
+    list.push(item);
+    byProject.set(item.projectId, list);
+  }
+  const tree: RevisionNode[] = [];
+  for (const [projectId, list] of byProject.entries()) {
+    const sorted = [...list].sort((left, right) => String((left as { savedAt?: string }).savedAt ?? left.updatedAt ?? '').localeCompare(String((right as { savedAt?: string }).savedAt ?? right.updatedAt ?? '')));
+    const root: RevisionNode = {
+      id: `${projectId}-root`,
+      projectId,
+      parentId: null,
+      label: 'origin',
+      wordCount: 0,
+      savedAt: (sorted[0] as { savedAt?: string } | undefined)?.savedAt ?? sorted[0]?.updatedAt ?? '',
+      children: [],
+    };
+    let previousId: string | null = `${projectId}-root`;
+    for (const item of sorted) {
+      const node: RevisionNode = {
+        id: item.projectId,
+        projectId,
+        parentId: previousId,
+        label: item.title || item.chapterTitle || 'revision',
+        wordCount: Number((item.artifact as { wordCount?: number } | undefined)?.wordCount ?? 0),
+        savedAt: (item as { savedAt?: string }).savedAt ?? item.updatedAt ?? '',
+        children: [],
+      };
+      root.children.push(node);
+      previousId = item.projectId;
+    }
+    tree.push(root);
+  }
+  return tree;
+}
+
+export function buildTagIndex(items: StudioArtifact[], tagsByProject: Record<string, string[]> = {}): TagIndex {
+  const allTags = new Set<string>();
+  const byProject: Record<string, string[]> = {};
+  const byTag: Record<string, string[]> = {};
+  for (const item of items) {
+    const explicit = tagsByProject[item.projectId] ?? [];
+    const inferred = extractInferredTags(item);
+    const merged = [...new Set([...explicit, ...inferred])].slice(0, 20);
+    byProject[item.projectId] = merged;
+    for (const tag of merged) {
+      allTags.add(tag);
+      const list = byTag[tag] ?? [];
+      list.push(item.projectId);
+      byTag[tag] = list;
+    }
+  }
+  return { tags: [...allTags].sort(), byProject, byTag };
+}
+
+function extractInferredTags(item: StudioArtifact): string[] {
+  const tags: string[] = [];
+  if (item.mode) tags.push(`mode:${item.mode}`);
+  if (item.stage) tags.push(`stage:${item.stage}`);
+  const foreshadowing = item.artifact?.foreshadowing ?? [];
+  if (foreshadowing.some((entry) => entry.endsWith(':overdue'))) tags.push('risk:overdue');
+  if (foreshadowing.some((entry) => entry.endsWith(':recovered'))) tags.push('health:recovered');
+  return tags;
+}
+
+export function searchProjectsIndexed(items: StudioArtifact[], query: string, options: { limit?: number; fields?: string[] } = {}): SearchHit[] {
+  const limit = options.limit ?? 20;
+  const fields = options.fields ?? ['title', 'mode', 'stage', 'chapterTitle', 'characters', 'foreshadowing', 'style', 'chapterSummary', 'continuationContext'];
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return [];
+  const hits: SearchHit[] = [];
+  for (const item of items) {
+    let score = 0;
+    const matched = new Set<string>();
+    const haystacks: Array<{ field: string; value: string }> = [];
+    if (fields.includes('title')) haystacks.push({ field: 'title', value: item.title });
+    if (fields.includes('mode')) haystacks.push({ field: 'mode', value: item.mode ?? '' });
+    if (fields.includes('stage')) haystacks.push({ field: 'stage', value: item.stage ?? '' });
+    if (fields.includes('chapterTitle')) haystacks.push({ field: 'chapterTitle', value: item.chapterTitle ?? '' });
+    if (fields.includes('characters')) for (const value of item.artifact?.characters ?? []) haystacks.push({ field: 'characters', value });
+    if (fields.includes('foreshadowing')) for (const value of item.artifact?.foreshadowing ?? []) haystacks.push({ field: 'foreshadowing', value });
+    if (fields.includes('style')) for (const value of item.artifact?.style ?? []) haystacks.push({ field: 'style', value });
+    if (fields.includes('chapterSummary')) haystacks.push({ field: 'chapterSummary', value: item.artifact?.chapterSummary ?? '' });
+    if (fields.includes('continuationContext')) haystacks.push({ field: 'continuationContext', value: item.artifact?.continuationContext ?? '' });
+    let excerpt = '';
+    for (const { field, value } of haystacks) {
+      const lower = value.toLowerCase();
+      const index = lower.indexOf(q);
+      if (index >= 0) {
+        score += field === 'title' || field === 'chapterTitle' ? 10 : field === 'characters' || field === 'foreshadowing' ? 6 : 3;
+        matched.add(field);
+        if (!excerpt) {
+          const start = Math.max(0, index - 12);
+          excerpt = value.slice(start, start + q.length + 24);
+        }
+      }
+    }
+    if (score > 0) hits.push({ projectId: item.projectId, title: item.title, score, matchedFields: [...matched], excerpt });
+  }
+  hits.sort((a, b) => b.score - a.score);
+  return hits.slice(0, limit);
+}
+
+export function planIndexedDbMigration(items: StudioArtifact[], options: { storageKey?: string; objectStoreName?: string; indexName?: string; softLimitBytes?: number } = {}): IndexedDbMigrationPlan {
+  const storageKey = options.storageKey ?? 'novel-ma:artifacts';
+  const objectStoreName = options.objectStoreName ?? 'projects';
+  const indexName = options.indexName ?? 'projectId';
+  const softLimit = options.softLimitBytes ?? 5 * 1024 * 1024;
+  const payload = JSON.stringify(items);
+  const estimatedBytes = payload.length * 2;
+  const warnings: string[] = [];
+  if (estimatedBytes > softLimit) warnings.push(`payload exceeds ${softLimit}B localStorage soft limit; IndexedDB recommended.`);
+  if (!items.length) warnings.push('no items to migrate; plan will create empty store.');
+  return {
+    storageKey,
+    objectStoreName,
+    indexName,
+    recordCount: items.length,
+    estimatedBytes,
+    warnings,
+    ready: warnings.length === 0 || warnings[0]?.startsWith('payload exceeds') === true,
+  };
+}
+
 function svgEscape(text: string): string {
   return String(text ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
 }

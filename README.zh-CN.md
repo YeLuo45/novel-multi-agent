@@ -49,6 +49,16 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V45 Web 项目库增强（IndexedDB 迁移 + 版本树 + 标签 + 全文搜索）
+
+- `buildRevisionTree(items)`：按 projectId 分组生成树状版本节点，origin root + 按 savedAt 排序的 revision children，parentId 链向上一个节点；纯函数可在 CLI 和 Web 共用。
+- `buildTagIndex(items, tagsByProject?)`：合并显式 tag + 推断 tag（`mode:theme`、`stage:completed`、`risk:overdue`、`health:recovered`），返回 tags/byProject/byTag 三视图。
+- `searchProjectsIndexed(items, query)`：9 字段（title/mode/stage/chapterTitle/characters/foreshadowing/style/chapterSummary/continuationContext）全文索引，按字段加权打分（title 10 / character+foreshadowing 6 / 其他 3），返回带 excerpt 的命中排序。
+- `planIndexedDbMigration(items)`：估算 `JSON.stringify(items).length*2` 字节数，对比 localStorage 5MB 软上限，返回 ready flag + warnings + store/index 名。
+- HTML 集成：搜索框 + 版本树按钮 + 标签索引按钮 + IDB 迁移计划按钮，4 个 inline 视图。
+- vm sandbox 兼容：4 个新函数通过 `Object.assign` + typeof guard 注入。
+- 修复 `buildRevisionTree` 旧 bug：原 `prev.children.push` 把节点链成线性链表而非 siblings，改为 `previousId` 链 + 全部 push 到 root.children。
+
 ## V44 Web 可视化层（SVG 图谱 / 人物弧线 / 章节节奏）
 
 - `buildForeshadowingGraphSvg(items)`：从 artifacts 收集去重伏笔，按 recovered/open/overdue/missing 4 色渲染圆形节点（极坐标布局），节点间用 4-4 dasharray 虚线连接，返回 `<svg>` markup string。

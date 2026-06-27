@@ -29,6 +29,10 @@ import {
   buildForeshadowingGraphSvg,
   buildCharacterArcSvg,
   buildChapterPacingSvg,
+  buildRevisionTree,
+  buildTagIndex,
+  searchProjectsIndexed,
+  planIndexedDbMigration,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -476,5 +480,57 @@ describe('web-first studio models', () => {
     const arc = buildCharacterArcSvg(quirky);
     assert.ok(!arc.svg.includes('<>&"\''));
     assert.ok(arc.svg.includes('&lt;') || arc.svg.includes('&amp;') || arc.svg.includes('&quot;'));
+  });
+
+  it('builds V45 revision tree grouped by projectId with sorted timestamps and parent links', () => {
+    const items = [
+      { ...sampleArtifacts[0]!, projectId: 'moon-1', savedAt: '2026-06-01T00:00:00.000Z' },
+      { ...sampleArtifacts[1]!, projectId: 'moon-1', savedAt: '2026-06-02T00:00:00.000Z' },
+      { ...sampleArtifacts[0]!, projectId: 'moon-2', savedAt: '2026-06-03T00:00:00.000Z' },
+    ];
+    const tree = buildRevisionTree(items);
+    assert.equal(tree.length, 2);
+    const moon1 = tree.find((node) => node.projectId === 'moon-1');
+    assert.ok(moon1);
+    assert.equal(moon1?.children.length, 2);
+    assert.equal(moon1?.children[0]?.parentId, 'moon-1-root');
+    assert.equal(moon1?.children[1]?.parentId, 'moon-1');
+    assert.ok((moon1?.children[1]?.savedAt ?? '') >= (moon1?.children[0]?.savedAt ?? ''));
+  });
+
+  it('builds V45 tag index with inferred mode/stage/risk/health tags and explicit overrides', () => {
+    const idx = buildTagIndex(sampleArtifacts, { 'moon-1': ['favorite', 'priority:p0'] });
+    assert.ok(idx.tags.includes('mode:theme'));
+    assert.ok(idx.tags.includes('mode:continuation'));
+    assert.ok(idx.tags.includes('risk:overdue'));
+    assert.ok(idx.tags.includes('health:recovered'));
+    assert.ok(idx.byProject['moon-1']?.includes('favorite'));
+    assert.ok(idx.byTag['mode:theme']?.includes('moon-1'));
+  });
+
+  it('searches V45 projects by token across all artifact fields with scored hits and excerpts', () => {
+    const hits = searchProjectsIndexed(sampleArtifacts, '银匙');
+    assert.ok(hits.length >= 1);
+    assert.ok(hits[0]?.matchedFields.includes('foreshadowing') || hits[0]?.matchedFields.includes('title'));
+    assert.ok(hits[0]?.excerpt.length > 0);
+    assert.ok(hits[0]!.score > 0);
+    const ranked = searchProjectsIndexed(sampleArtifacts, '月背');
+    assert.ok(ranked.length >= 1);
+    const empty = searchProjectsIndexed(sampleArtifacts, '');
+    assert.equal(empty.length, 0);
+  });
+
+  it('plans V45 IndexedDB migration with record count size warnings and ready flag', () => {
+    const plan = planIndexedDbMigration(sampleArtifacts);
+    assert.equal(plan.ready, true);
+    assert.equal(plan.storageKey, 'novel-ma:artifacts');
+    assert.equal(plan.objectStoreName, 'projects');
+    assert.equal(plan.indexName, 'projectId');
+    assert.equal(plan.recordCount, sampleArtifacts.length);
+    assert.ok(plan.estimatedBytes > 0);
+
+    const empty = planIndexedDbMigration([]);
+    assert.ok(empty.warnings.some((line) => line.includes('no items')));
+    assert.equal(empty.ready, false);
   });
 });
