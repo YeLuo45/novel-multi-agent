@@ -427,6 +427,97 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface IndexedDbOperation {
+  kind: 'get' | 'getAll' | 'put' | 'delete' | 'count' | 'clear';
+  store: string;
+  key?: string;
+  value?: unknown;
+  expect: 'first' | 'all' | 'count' | 'none';
+}
+
+export interface IndexedDbRuntime {
+  adapter: IndexedDbAdapter;
+  openSteps: string[];
+  operations: string[];
+  batchSize: number;
+  supportsBatch: boolean;
+  supportsTransaction: boolean;
+  warnings: string[];
+}
+
+export interface IndexedDbBatchPlan {
+  operations: IndexedDbOperation[];
+  totalOps: number;
+  estimatedDurationMs: number;
+  groupedByStore: Record<string, number>;
+  transaction: boolean;
+  fallbackToOneByOne: boolean;
+}
+
+export interface IndexedDbQuotaAssessment {
+  totalBytes: number;
+  estimatedItems: number;
+  recommendedEviction: number;
+  warning: string;
+  ok: boolean;
+}
+
+export function buildIndexedDbRuntime(options: { adapter?: IndexedDbAdapter; batchSize?: number; supportsBatch?: boolean; supportsTransaction?: boolean } = {}): IndexedDbRuntime {
+  const adapter = options.adapter ?? buildIndexedDbAdapter();
+  const batchSize = Math.max(1, Math.min(1000, options.batchSize ?? 100));
+  const supportsBatch = options.supportsBatch ?? true;
+  const supportsTransaction = options.supportsTransaction ?? true;
+  const operations = ['open', 'get', 'getAll', 'put', 'delete', 'count', 'clear', 'batch-put', 'migrate'];
+  const openSteps = [
+    `indexedDB.open('${adapter.schema.name}', ${adapter.schema.version})`,
+    `onupgradeneeded: 创建 ${adapter.schema.stores.map((store) => store.name).join('/')} object store + indexes`,
+    `onerror: 降级到 fallbackStorageKey='${adapter.fallbackStorageKey}' (localStorage)`,
+    `onsuccess: 返回 IDBDatabase handle 供后续操作复用`,
+  ];
+  const warnings: string[] = [];
+  if (!supportsBatch) warnings.push('batch operation disabled; runtime will fall back to per-item put');
+  if (!supportsTransaction) warnings.push('transaction support disabled; multi-store updates may not be atomic');
+  return { adapter, openSteps, operations, batchSize, supportsBatch, supportsTransaction, warnings };
+}
+
+export function planIndexedDbBatch(operations: IndexedDbOperation[], options: { batchSize?: number; supportsTransaction?: boolean; fallbackToOneByOne?: boolean } = {}): IndexedDbBatchPlan {
+  const batchSize = Math.max(1, options.batchSize ?? 100);
+  const supportsTransaction = options.supportsTransaction ?? true;
+  const fallback = options.fallbackToOneByOne ?? true;
+  const totalOps = operations.length;
+  const groupedByStore: Record<string, number> = {};
+  for (const op of operations) {
+    groupedByStore[op.store] = (groupedByStore[op.store] ?? 0) + 1;
+  }
+  const estimatedDurationMs = Math.max(1, Math.round((totalOps * 2) / Math.max(1, batchSize / 10)));
+  const transaction = supportsTransaction && new Set(operations.map((op) => op.store)).size <= 3;
+  return {
+    operations,
+    totalOps,
+    estimatedDurationMs,
+    groupedByStore,
+    transaction,
+    fallbackToOneByOne: fallback,
+  };
+}
+
+export function assessIndexedDbQuota(items: Array<{ sizeBytes: number }>, options: { maxBytes?: number; targetBytes?: number } = {}): IndexedDbQuotaAssessment {
+  const maxBytes = options.maxBytes ?? 50 * 1024 * 1024;
+  const targetBytes = options.targetBytes ?? Math.floor(maxBytes * 0.8);
+  const totalBytes = items.reduce((sum, item) => sum + Math.max(0, item.sizeBytes), 0);
+  const estimatedItems = items.length;
+  const ok = totalBytes <= targetBytes;
+  const overage = Math.max(0, totalBytes - targetBytes);
+  const recommendedEviction = ok ? 0 : Math.ceil(overage / Math.max(1, totalBytes / estimatedItems));
+  return {
+    totalBytes,
+    estimatedItems,
+    recommendedEviction,
+    warning: ok ? 'quota within target' : `total ${totalBytes}B exceeds target ${targetBytes}B; consider evicting ${recommendedEviction} items`,
+    ok,
+  };
+}
+
 export interface UndoStackConfig {
   storageKey: string;
   maxSize: number;

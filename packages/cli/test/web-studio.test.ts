@@ -58,6 +58,9 @@ import {
   popUndoEntry,
   planUndoRestore,
   computeUndoStats,
+  buildIndexedDbRuntime,
+  planIndexedDbBatch,
+  assessIndexedDbQuota,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -916,5 +919,58 @@ describe('web-first studio models', () => {
     assert.ok(stats.oldestAge >= 60_000);
     assert.ok(stats.averageInterval >= 30_000);
     assert.equal(stats.ttlMs, config.ttlMs);
+  });
+
+  it('builds V54 IndexedDB runtime with open steps operations batch and warnings', () => {
+    const runtime = buildIndexedDbRuntime();
+    assert.equal(runtime.operations.length, 9);
+    assert.ok(runtime.openSteps.length === 4);
+    assert.ok(runtime.openSteps[0]?.includes('indexedDB.open'));
+    assert.ok(runtime.openSteps[1]?.includes('onupgradeneeded'));
+    assert.ok(runtime.openSteps[2]?.includes('fallback'));
+    assert.equal(runtime.supportsBatch, true);
+    assert.equal(runtime.supportsTransaction, true);
+
+    const noBatch = buildIndexedDbRuntime({ supportsBatch: false, supportsTransaction: false });
+    assert.ok(noBatch.warnings.length >= 2);
+    assert.ok(noBatch.warnings.some((line) => line.includes('batch')));
+    assert.ok(noBatch.warnings.some((line) => line.includes('transaction')));
+  });
+
+  it('plans V54 IndexedDB batch with grouped stores transaction flag and estimated duration', () => {
+    const ops: IndexedDbOperation[] = [
+      { kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' },
+      { kind: 'put', store: 'projects', key: 'p2', value: { x: 2 }, expect: 'none' },
+      { kind: 'put', store: 'tags', key: 't1', value: { tag: 'x' }, expect: 'none' },
+    ];
+    const plan = planIndexedDbBatch(ops);
+    assert.equal(plan.totalOps, 3);
+    assert.equal(plan.groupedByStore.projects, 2);
+    assert.equal(plan.groupedByStore.tags, 1);
+    assert.equal(plan.transaction, true);
+    assert.equal(plan.fallbackToOneByOne, true);
+    assert.ok(plan.estimatedDurationMs >= 1);
+
+    const multiStore = planIndexedDbBatch([
+      { kind: 'put', store: 'a', key: 'k', value: {}, expect: 'none' },
+      { kind: 'put', store: 'b', key: 'k', value: {}, expect: 'none' },
+      { kind: 'put', store: 'c', key: 'k', value: {}, expect: 'none' },
+      { kind: 'put', store: 'd', key: 'k', value: {}, expect: 'none' },
+    ]);
+    assert.equal(multiStore.transaction, false);
+  });
+
+  it('assesses V54 IndexedDB quota with total bytes recommended eviction and ok flag', () => {
+    const ok = assessIndexedDbQuota([{ sizeBytes: 1024 }, { sizeBytes: 2048 }], { maxBytes: 100_000, targetBytes: 80_000 });
+    assert.equal(ok.totalBytes, 3072);
+    assert.equal(ok.estimatedItems, 2);
+    assert.equal(ok.recommendedEviction, 0);
+    assert.equal(ok.ok, true);
+    assert.equal(ok.warning, 'quota within target');
+
+    const over = assessIndexedDbQuota(Array.from({ length: 1000 }, () => ({ sizeBytes: 100_000 })), { maxBytes: 50_000_000, targetBytes: 10_000_000 });
+    assert.equal(over.ok, false);
+    assert.ok(over.recommendedEviction > 0);
+    assert.ok(over.warning.includes('exceeds target'));
   });
 });

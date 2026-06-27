@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V54 Web IndexedDB Runtime（open + batch + quota 评估）
+
+- `buildIndexedDbRuntime()`：从 V51 schema 生成 runtime，9 个 operations（open/get/getAll/put/delete/count/clear/batch-put/migrate）+ 4 步 open 流程（open → onupgradeneeded → onerror 降级 fallback → onsuccess）+ batchSize（1-1000）+ supportsBatch/Transaction flags。
+- `planIndexedDbBatch(ops)`：分组 ops by store + estimatedDurationMs + transaction flag（≤3 store 自动启用）+ fallbackToOneByOne。
+- `assessIndexedDbQuota(items)`：totalBytes vs targetBytes（默认 maxBytes 80%）+ recommendedEviction（超量时按均值算驱逐数）+ ok flag。
+- HTML 集成：3 个 inline 按钮（runtime/batch/quota），从 `library.list()` 自动生成 ops 计划。
+- vm sandbox 兼容：3 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V53 Web 撤销栈真持久化（localStorage 栈 + 跨刷新 + 栈统计）
 
 - `buildUndoStackConfig()`：storageKey `novel-ma:undo` / maxSize 50（clamp 1-500）/ ttlMs 7 天（clamp ≥60s）/ persistAcrossReload true。
