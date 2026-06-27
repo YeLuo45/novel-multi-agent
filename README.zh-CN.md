@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V58 IndexedDB 真实 runtime executor（open + migrate + put + close 步骤代码）
+
+- `buildIdbExecutor({dbName, version, operations, supportsIdb, fallbackStorageKey})`：从 V51 schema + V54 operations 生成真实 `indexedDB.open(...)` + `onupgradeneeded` + per-op `tx.objectStore(...).put/get/delete/count/getAll/clear()` + `db.close()` 代码字符串。
+- `planIdbMigration(items, options)`：从 artifact 列表 + sizeBytes 推算 IDB put steps + totalBytes vs maxBytes（默认 50MB）+ warnings + ready flag。
+- HTML 集成：2 个 inline 按钮（executor/migration plan），每步显示 `description + code`，HTML 端可直接 `eval(step.code)` 执行（vm sandbox 不执行，真实浏览器可执行）。
+- 修 IdbMigrationPlan 缺 `warnings` 字段导致 `warnings is not defined`：补回 warnings: string[] 字段。
+- 修 `planIdbMigration` 超量时 `ready` 永远 true 的 bug：添加 `overage` 标志 + `ready: !overage && executor.ready`。
+
 ## V57 Redo 栈真实实现（push + pop + forward 计划）
 
 - `buildRedoStackConfig()`：storageKey `novel-ma:redo` / maxSize 50（clamp 1-500）/ ttlMs 7 天。

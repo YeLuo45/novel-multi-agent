@@ -427,6 +427,112 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface IdbExecutorStep {
+  index: number;
+  action: 'open' | 'migrate' | 'put' | 'get' | 'getAll' | 'delete' | 'count' | 'clear' | 'close' | 'error';
+  store: string;
+  key?: string;
+  value?: unknown;
+  code: string;
+  description: string;
+}
+
+export interface IdbExecutor {
+  dbName: string;
+  version: number;
+  steps: IdbExecutorStep[];
+  totalSteps: number;
+  estimatedDurationMs: number;
+  warnings: string[];
+  ready: boolean;
+  fallbackAvailable: boolean;
+}
+
+export interface IdbMigrationItem {
+  path: string;
+  projectId: string;
+  sizeBytes: number;
+}
+
+export interface IdbMigrationPlan {
+  items: IdbMigrationItem[];
+  totalItems: number;
+  totalBytes: number;
+  estimatedDurationMs: number;
+  steps: IdbExecutorStep[];
+  fallbackStorageKey: string;
+  ready: boolean;
+  warnings: string[];
+}
+
+export function buildIdbExecutor(options: { dbName?: string; version?: number; operations?: IndexedDbOperation[]; supportsIdb?: boolean; fallbackStorageKey?: string } = {}): IdbExecutor {
+  const dbName = options.dbName ?? 'novel-ma';
+  const version = options.version ?? 1;
+  const supportsIdb = options.supportsIdb ?? true;
+  const fallback = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const operations = options.operations ?? [];
+  const steps: IdbExecutorStep[] = [];
+  const warnings: string[] = [];
+  if (!supportsIdb) warnings.push('IndexedDB not supported; will fall back to localStorage ' + fallback);
+  steps.push({ index: 1, action: 'open', store: '', code: `const req = indexedDB.open('${dbName}', ${version});`, description: 'open database handle' });
+  steps.push({ index: 2, action: 'migrate', store: '', code: `req.onupgradeneeded = (e) => { /* create object stores + indexes */ }`, description: 'create 3 stores (projects/tags/undo) + 5 indexes' });
+  for (let i = 0; i < operations.length; i += 1) {
+    const op = operations[i];
+    const idx = steps.length + 1;
+    if (op.kind === 'put' && op.key !== undefined) {
+      steps.push({ index: idx, action: 'put', store: op.store, key: op.key, value: op.value, code: `tx.objectStore('${op.store}').put(${JSON.stringify(op.value ?? null)}, '${op.key}')`, description: `put ${op.store}/${op.key}` });
+    } else if (op.kind === 'get' && op.key !== undefined) {
+      steps.push({ index: idx, action: 'get', store: op.store, key: op.key, code: `tx.objectStore('${op.store}').get('${op.key}')`, description: `get ${op.store}/${op.key}` });
+    } else if (op.kind === 'getAll') {
+      steps.push({ index: idx, action: 'getAll', store: op.store, code: `tx.objectStore('${op.store}').getAll()`, description: `getAll ${op.store}` });
+    } else if (op.kind === 'delete' && op.key !== undefined) {
+      steps.push({ index: idx, action: 'delete', store: op.store, key: op.key, code: `tx.objectStore('${op.store}').delete('${op.key}')`, description: `delete ${op.store}/${op.key}` });
+    } else if (op.kind === 'count') {
+      steps.push({ index: idx, action: 'count', store: op.store, code: `tx.objectStore('${op.store}').count()`, description: `count ${op.store}` });
+    } else if (op.kind === 'clear') {
+      steps.push({ index: idx, action: 'clear', store: op.store, code: `tx.objectStore('${op.store}').clear()`, description: `clear ${op.store}` });
+    }
+  }
+  steps.push({ index: steps.length + 1, action: 'close', store: '', code: 'db.close();', description: 'close database handle' });
+  const estimatedDurationMs = Math.max(10, operations.length * 5);
+  return {
+    dbName,
+    version,
+    steps,
+    totalSteps: steps.length,
+    estimatedDurationMs,
+    warnings,
+    ready: supportsIdb && steps.length >= 2,
+    fallbackAvailable: true,
+  };
+}
+
+export function planIdbMigration(items: Array<{ projectId?: string; sizeBytes?: number; path?: string }>, options: { dbName?: string; version?: number; maxBytes?: number; fallbackStorageKey?: string } = {}): IdbMigrationPlan {
+  const maxBytes = options.maxBytes ?? 50 * 1024 * 1024;
+  const fallbackStorageKey = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const mapped: IdbMigrationItem[] = items.map((item) => ({
+    path: item.path ?? '.novel-ma/projects/auto',
+    projectId: item.projectId ?? 'unknown',
+    sizeBytes: Math.max(0, item.sizeBytes ?? 0),
+  }));
+  const totalItems = mapped.length;
+  const totalBytes = mapped.reduce((sum, item) => sum + item.sizeBytes, 0);
+  const overage = totalBytes > maxBytes;
+  const warnings: string[] = overage ? [`total ${totalBytes}B exceeds ${maxBytes}B IDB soft limit`] : [];
+  const operations: IndexedDbOperation[] = mapped.map((item) => ({ kind: 'put', store: 'projects', key: item.projectId, value: { path: item.path, sizeBytes: item.sizeBytes }, expect: 'none' }));
+  const executor = buildIdbExecutor({ dbName: options.dbName, version: options.version, operations, supportsIdb: true, fallbackStorageKey });
+  return {
+    items: mapped,
+    totalItems,
+    totalBytes,
+    estimatedDurationMs: executor.estimatedDurationMs,
+    steps: executor.steps,
+    fallbackStorageKey,
+    ready: !overage && executor.ready,
+    warnings,
+  };
+}
+
 export interface RedoStackConfig {
   storageKey: string;
   maxSize: number;

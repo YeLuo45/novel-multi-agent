@@ -70,6 +70,8 @@ import {
   pushRedoEntry,
   popRedoEntry,
   planRedoForward,
+  buildIdbExecutor,
+  planIdbMigration,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1096,5 +1098,53 @@ describe('web-first studio models', () => {
     const missing = planRedoForward(undoStack, redoStack, 'e-zzz');
     assert.equal(missing.ready, false);
     assert.equal(missing.fromUndo, false);
+  });
+
+  it('builds V58 IndexedDB executor with open migrate put get count close steps and real code strings', () => {
+    const executor = buildIdbExecutor({
+      dbName: 'novel-ma',
+      version: 1,
+      operations: [
+        { kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' },
+        { kind: 'get', store: 'projects', key: 'p1', expect: 'first' },
+        { kind: 'count', store: 'tags', expect: 'count' },
+        { kind: 'getAll', store: 'undo', expect: 'all' },
+      ],
+    });
+    assert.equal(executor.dbName, 'novel-ma');
+    assert.equal(executor.version, 1);
+    assert.ok(executor.totalSteps >= 6);
+    assert.equal(executor.steps[0]?.action, 'open');
+    assert.equal(executor.steps[1]?.action, 'migrate');
+    assert.ok(executor.steps.some((s) => s.action === 'put' && s.code.includes('objectStore')));
+    assert.ok(executor.steps.some((s) => s.action === 'get' && s.code.includes('.get(')));
+    assert.ok(executor.steps.some((s) => s.action === 'count' && s.code.includes('.count()')));
+    assert.equal(executor.steps[executor.steps.length - 1]?.action, 'close');
+    assert.equal(executor.ready, true);
+    assert.equal(executor.fallbackAvailable, true);
+    assert.ok(executor.estimatedDurationMs >= 10);
+
+    const noIdb = buildIdbExecutor({ supportsIdb: false });
+    assert.equal(noIdb.ready, false);
+    assert.ok(noIdb.warnings.some((line) => line.includes('IndexedDB not supported')));
+  });
+
+  it('plans V58 IndexedDB migration with mapped items total bytes steps and ready flag', () => {
+    const items = [
+      { projectId: 'p1', path: '.novel-ma/projects/p1', sizeBytes: 1024 },
+      { projectId: 'p2', path: '.novel-ma/projects/p2', sizeBytes: 2048 },
+      { projectId: 'p3' },
+    ];
+    const plan = planIdbMigration(items, { dbName: 'novel-ma', version: 1, maxBytes: 10_000 });
+    assert.equal(plan.totalItems, 3);
+    assert.equal(plan.totalBytes, 1024 + 2048);
+    assert.equal(plan.fallbackStorageKey, 'novel-ma:artifacts');
+    assert.ok(plan.steps.length >= 5);
+    assert.ok(plan.steps.some((s) => s.action === 'put' && s.code.includes('projects')));
+    assert.equal(plan.ready, true);
+
+    const over = planIdbMigration([{ projectId: 'huge', sizeBytes: 100_000_000 }], { maxBytes: 1024 });
+    assert.equal(over.ready, false);
+    assert.ok(over.steps.length >= 1);
   });
 });
