@@ -427,6 +427,89 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface KeyboardShortcut {
+  id: string;
+  key: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+  label: string;
+  scope: 'global' | 'editor' | 'library';
+}
+
+export interface KeyboardShortcutPlan {
+  shortcut: KeyboardShortcut;
+  displayKey: string;
+  conflictWith: string[];
+  ready: boolean;
+  warning?: string;
+}
+
+export interface ChapterShortcutBindings {
+  bindings: KeyboardShortcutPlan[];
+  totalCount: number;
+  enabledCount: number;
+  conflictCount: number;
+  warnings: string[];
+}
+
+function shortcutKey(shortcut: KeyboardShortcut): string {
+  const parts: string[] = [];
+  if (shortcut.ctrl) parts.push('Ctrl');
+  if (shortcut.meta) parts.push('Cmd');
+  if (shortcut.alt) parts.push('Alt');
+  if (shortcut.shift) parts.push('Shift');
+  parts.push(shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key);
+  return parts.join('+');
+}
+
+export function planKeyboardShortcut(input: { id: string; key: string; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean; label: string; scope?: KeyboardShortcut['scope']; existing?: KeyboardShortcut[] }): KeyboardShortcutPlan {
+  const shortcut: KeyboardShortcut = {
+    id: input.id,
+    key: input.key,
+    ctrl: input.ctrl ?? false,
+    shift: input.shift ?? false,
+    alt: input.alt ?? false,
+    meta: input.meta ?? false,
+    label: input.label,
+    scope: input.scope ?? 'global',
+  };
+  const displayKey = shortcutKey(shortcut);
+  const existing = input.existing ?? [];
+  const conflictWith = existing.filter((other) => shortcutKey(other) === displayKey && other.id !== shortcut.id).map((other) => other.id);
+  return {
+    shortcut,
+    displayKey,
+    conflictWith,
+    ready: conflictWith.length === 0,
+    warning: conflictWith.length ? `conflict with ${conflictWith.join(', ')}` : undefined,
+  };
+}
+
+export function buildChapterShortcutBindings(options: { enableCtrlZ?: boolean; enableCtrlY?: boolean; enableCtrlS?: boolean; enableCtrlB?: boolean; enableCtrlE?: boolean } = {}): ChapterShortcutBindings {
+  const defaults = { enableCtrlZ: true, enableCtrlY: true, enableCtrlS: true, enableCtrlB: true, enableCtrlE: true, ...options };
+  const plans: KeyboardShortcutPlan[] = [];
+  const existing: KeyboardShortcut[] = [];
+  const build = (id: string, key: string, ctrl: boolean, shift: boolean, alt: boolean, meta: boolean, label: string) => {
+    const plan = planKeyboardShortcut({ id, key, ctrl, shift, alt, meta, label, existing });
+    existing.push(plan.shortcut);
+    plans.push(plan);
+  };
+  if (defaults.enableCtrlZ) build('editor.undo', 'z', true, false, false, false, '撤销');
+  if (defaults.enableCtrlY) build('editor.redo', 'y', true, false, false, false, '重做');
+  if (defaults.enableCtrlS) build('library.save', 's', true, false, false, false, '保存到项目库');
+  if (defaults.enableCtrlB) build('editor.bold', 'b', true, false, false, false, '加粗');
+  if (defaults.enableCtrlE) build('editor.code', 'e', true, false, false, false, 'inline code');
+  const conflictCount = plans.filter((plan) => !plan.ready).length;
+  return {
+    bindings: plans,
+    totalCount: plans.length,
+    enabledCount: plans.length,
+    conflictCount,
+    warnings: plans.filter((plan) => plan.warning).map((plan) => plan.warning ?? ''),
+  };
+}
 export interface ChapterDocument {
   body: string;
   renderedHtml: string;

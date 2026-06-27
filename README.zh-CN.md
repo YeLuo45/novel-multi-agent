@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V56 键盘快捷键真绑定（Ctrl+Z/Y/S/B/E + 冲突检测）
+
+- `planKeyboardShortcut({id, key, ctrl, shift, alt, meta, label, scope, existing?})`：返回 `{shortcut, displayKey, conflictWith[], ready, warning?}`；displayKey 自动拼接 `Ctrl+Z` / `Cmd+Shift+Enter`；existing 用于冲突检测。
+- `buildChapterShortcutBindings({enableCtrlZ, enableCtrlY, enableCtrlS, enableCtrlB, enableCtrlE})`：默认 5 个快捷键（撤销/重做/保存/加粗/inline code）；返回 totalCount + conflictCount + warnings。
+- HTML 集成：`document.addEventListener('keydown')` 在 textarea focus 范围内匹配 binding，Ctrl+Z 真实从 V53 undo 栈 pop + 恢复 body；Ctrl+B 包裹选区为 `**`；Ctrl+E 包裹为 `` ` ``；Ctrl+S 触发 V55 save。
+- vm sandbox 兼容：2 个新函数通过 Object.assign + typeof guard 注入。
+- 修 keydown 监听中误用 TS `as` cast 致 SyntaxError：改为 `typeof before === 'object' ? before.body : undefined`。
+
 ## V55 章节正文 Markdown 嵌入（raw / preview / split 三视图 + undo 联动）
 
 - `buildChapterDocument({body, view, undoEntries})`：聚合 `renderMarkdown` + `countWords` + 元数据（wordCount/headingCount/codeBlockCount/linkCount）→ 单一文档模型。

@@ -64,6 +64,8 @@ import {
   buildChapterDocument,
   switchChapterView,
   planChapterEdit,
+  planKeyboardShortcut,
+  buildChapterShortcutBindings,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1008,5 +1010,35 @@ describe('web-first studio models', () => {
     assert.ok(plan.fingerprint.startsWith('fp-'));
     assert.equal(plan.undoEntriesAfter, 6);
     assert.equal(plan.label, 'add opening scene');
+  });
+
+  it('plans V56 keyboard shortcut with display key conflict detection and scope', () => {
+    const a = planKeyboardShortcut({ id: 'editor.undo', key: 'z', ctrl: true, label: 'undo' });
+    assert.equal(a.displayKey, 'Ctrl+Z');
+    assert.equal(a.ready, true);
+    assert.equal(a.shortcut.scope, 'global');
+
+    const b = planKeyboardShortcut({ id: 'editor.redo', key: 'z', ctrl: true, label: 'redo', existing: [a.shortcut] });
+    assert.equal(b.displayKey, 'Ctrl+Z');
+    assert.equal(b.ready, false);
+    assert.deepEqual(b.conflictWith, ['editor.undo']);
+    assert.ok(b.warning?.includes('conflict'));
+  });
+
+  it('builds V56 chapter shortcut bindings with 5 default shortcuts and conflict count', () => {
+    const bindings = buildChapterShortcutBindings();
+    assert.equal(bindings.totalCount, 5);
+    assert.equal(bindings.enabledCount, 5);
+    assert.equal(bindings.conflictCount, 0);
+    assert.ok(bindings.warnings.length === 0);
+    const labels = bindings.bindings.map((plan) => plan.shortcut.id);
+    assert.ok(labels.includes('editor.undo'));
+    assert.ok(labels.includes('editor.redo'));
+    assert.ok(labels.includes('library.save'));
+    assert.ok(labels.includes('editor.bold'));
+    assert.ok(labels.includes('editor.code'));
+
+    const partial = buildChapterShortcutBindings({ enableCtrlY: false, enableCtrlB: false });
+    assert.equal(partial.totalCount, 3);
   });
 });
