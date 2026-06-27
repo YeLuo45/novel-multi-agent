@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V55 章节正文 Markdown 嵌入（raw / preview / split 三视图 + undo 联动）
+
+- `buildChapterDocument({body, view, undoEntries})`：聚合 `renderMarkdown` + `countWords` + 元数据（wordCount/headingCount/codeBlockCount/linkCount）→ 单一文档模型。
+- `switchChapterView(doc, view)`：纯函数切换 raw/preview/split，body/renderedHtml 不变。
+- `planChapterEdit({before, after, label, undoEntriesBefore})`：返回 `{operation, deltaWords, fingerprint, undoEntriesAfter, label}`；fingerprint 复用 V43 `fingerprintOf`。
+- HTML 集成：textarea + 4 按钮（raw/preview/split/save）+ stats badge（view + 字数 + 标题 + 代码 + 链接）+ split 模式用 CSS grid 1:1 展示；save 按钮调 `planChapterEdit` + `planUndoEntry` + `pushUndoEntry` 真实写入 V53 撤销栈。
+- 复用 V43 + V52 + V53：单文件内零依赖集成，三个方向的产物通过 buildChapterDocument 聚合。
+
 ## V54 Web IndexedDB Runtime（open + batch + quota 评估）
 
 - `buildIndexedDbRuntime()`：从 V51 schema 生成 runtime，9 个 operations（open/get/getAll/put/delete/count/clear/batch-put/migrate）+ 4 步 open 流程（open → onupgradeneeded → onerror 降级 fallback → onsuccess）+ batchSize（1-1000）+ supportsBatch/Transaction flags。

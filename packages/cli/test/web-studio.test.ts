@@ -61,6 +61,9 @@ import {
   buildIndexedDbRuntime,
   planIndexedDbBatch,
   assessIndexedDbQuota,
+  buildChapterDocument,
+  switchChapterView,
+  planChapterEdit,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -972,5 +975,38 @@ describe('web-first studio models', () => {
     assert.equal(over.ok, false);
     assert.ok(over.recommendedEviction > 0);
     assert.ok(over.warning.includes('exceeds target'));
+  });
+
+  it('builds V55 chapter document with view word count heading and undo entry count', () => {
+    const md = '# 章标题\n**粗体** 内容。\n\n- 列表\n\n```\ncode\n```';
+    const doc = buildChapterDocument({ body: md, view: 'split', undoEntries: 3 });
+    assert.equal(doc.view, 'split');
+    assert.equal(doc.body, md);
+    assert.ok(doc.renderedHtml.includes('<h1>章标题</h1>'));
+    assert.ok(doc.renderedHtml.includes('<strong>粗体</strong>'));
+    assert.ok(doc.wordCount > 0);
+    assert.equal(doc.headingCount, 1);
+    assert.equal(doc.codeBlockCount, 1);
+    assert.equal(doc.undoEntries, 3);
+  });
+
+  it('switches V55 chapter view between raw preview and split with state preservation', () => {
+    const doc = buildChapterDocument({ body: '# A\nhello', view: 'raw' });
+    const preview = switchChapterView(doc, 'preview');
+    assert.equal(preview.view, 'preview');
+    assert.equal(preview.body, doc.body);
+    assert.equal(preview.wordCount, doc.wordCount);
+    const split = switchChapterView(preview, 'split');
+    assert.equal(split.view, 'split');
+    assert.equal(split.renderedHtml, doc.renderedHtml);
+  });
+
+  it('plans V55 chapter edit with delta words fingerprint and incremented undo entry count', () => {
+    const plan = planChapterEdit({ before: '林澈推开门', after: '林澈推开门，月背图书馆的银匙在地上闪烁。', label: 'add opening scene', undoEntriesBefore: 5 });
+    assert.equal(plan.operation, 'persist-revision');
+    assert.ok(plan.deltaWords > 0);
+    assert.ok(plan.fingerprint.startsWith('fp-'));
+    assert.equal(plan.undoEntriesAfter, 6);
+    assert.equal(plan.label, 'add opening scene');
   });
 });

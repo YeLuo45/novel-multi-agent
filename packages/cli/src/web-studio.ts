@@ -427,6 +427,48 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface ChapterDocument {
+  body: string;
+  renderedHtml: string;
+  view: 'raw' | 'preview' | 'split';
+  wordCount: number;
+  headingCount: number;
+  codeBlockCount: number;
+  linkCount: number;
+  undoEntries: number;
+}
+
+export function buildChapterDocument(input: { body: string; view?: ChapterDocument['view']; undoEntries?: number }): ChapterDocument {
+  const view = input.view ?? 'raw';
+  const rendered = renderMarkdown(input.body);
+  return {
+    body: input.body,
+    renderedHtml: rendered.html,
+    view,
+    wordCount: countWords(input.body),
+    headingCount: rendered.headings,
+    codeBlockCount: rendered.codeBlocks,
+    linkCount: rendered.links,
+    undoEntries: input.undoEntries ?? 0,
+  };
+}
+
+export function switchChapterView(input: ChapterDocument, view: ChapterDocument['view']): ChapterDocument {
+  return { ...input, view };
+}
+
+export function planChapterEdit(input: { before: string; after: string; label?: string; undoEntriesBefore: number }): { operation: 'persist-revision'; deltaWords: number; fingerprint: string; undoEntriesAfter: number; label: string } {
+  const beforeWords = countWords(input.before);
+  const afterWords = countWords(input.after);
+  const fp = fingerprintOf(input.after);
+  return {
+    operation: 'persist-revision',
+    deltaWords: afterWords - beforeWords,
+    fingerprint: fp,
+    undoEntriesAfter: input.undoEntriesBefore + 1,
+    label: input.label ?? 'chapter edit',
+  };
+}
 export interface IndexedDbOperation {
   kind: 'get' | 'getAll' | 'put' | 'delete' | 'count' | 'clear';
   store: string;
