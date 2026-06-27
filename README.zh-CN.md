@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V57 Redo 栈真实实现（push + pop + forward 计划）
+
+- `buildRedoStackConfig()`：storageKey `novel-ma:redo` / maxSize 50（clamp 1-500）/ ttlMs 7 天。
+- `pushRedoEntry(stack, entry, now)`：TTL 过滤 + FIFO trim 保留最后 maxSize 条。
+- `popRedoEntry(stack)`：返回 `{stack, entry}`，栈空时 entry=null。
+- `planRedoForward(undoStack, redoStack, entryId)`：返回 `{entryId, fromUndo, pushedToRedo, redoStackSize, undoStackSize, steps[4], ready}`。
+- HTML 集成：3 个 inline 按钮（push/pop/plan）+ 真实 localStorage 持久化（`novel-ma:redo` key）+ loadRedoStack/saveRedoStack 辅助函数。
+- 关键修复：V56 修的 typeof guard 在 V57 复用通过 Object.assign + typeof 嵌套时不能正确闭合——必须用 `typeof fn === 'function' ? fn : () => null` 形式而非嵌套条件。
+
 ## V56 键盘快捷键真绑定（Ctrl+Z/Y/S/B/E + 冲突检测）
 
 - `planKeyboardShortcut({id, key, ctrl, shift, alt, meta, label, scope, existing?})`：返回 `{shortcut, displayKey, conflictWith[], ready, warning?}`；displayKey 自动拼接 `Ctrl+Z` / `Cmd+Shift+Enter`；existing 用于冲突检测。

@@ -66,6 +66,10 @@ import {
   planChapterEdit,
   planKeyboardShortcut,
   buildChapterShortcutBindings,
+  buildRedoStackConfig,
+  pushRedoEntry,
+  popRedoEntry,
+  planRedoForward,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1040,5 +1044,57 @@ describe('web-first studio models', () => {
 
     const partial = buildChapterShortcutBindings({ enableCtrlY: false, enableCtrlB: false });
     assert.equal(partial.totalCount, 3);
+  });
+
+  it('builds V57 redo stack config with defaults storage key max size and ttl', () => {
+    const config = buildRedoStackConfig();
+    assert.equal(config.storageKey, 'novel-ma:redo');
+    assert.ok(config.maxSize >= 1 && config.maxSize <= 500);
+    assert.ok(config.ttlMs >= 60_000);
+    const custom = buildRedoStackConfig({ maxSize: 100, ttlMs: 1000 * 60 * 60 });
+    assert.equal(custom.maxSize, 100);
+  });
+
+  it('pushes V57 redo entry with ttl filter and FIFO trim respecting max size', () => {
+    const config = buildRedoStackConfig({ maxSize: 3 });
+    let stack: RedoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, newestEntryId: null };
+    for (let i = 0; i < 5; i += 1) stack = pushRedoEntry(stack, { id: `r-${i}`, createdAt: new Date(Date.now() - i).toISOString(), before: {}, after: {}, label: `redo ${i}` });
+    assert.equal(stack.entries.length, 3);
+    assert.equal(stack.entries[0]?.id, 'r-2');
+    assert.equal(stack.entries[2]?.id, 'r-4');
+    assert.equal(stack.totalPushed, 5);
+  });
+
+  it('pops V57 redo entry with stack state update and empty stack safety', () => {
+    const config = buildRedoStackConfig();
+    let stack: RedoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, newestEntryId: null };
+    stack = pushRedoEntry(stack, { id: 'r-1', createdAt: new Date().toISOString(), before: {}, after: {}, label: 'redo' });
+    const popped = popRedoEntry(stack);
+    assert.ok(popped.entry);
+    assert.equal(popped.entry?.id, 'r-1');
+    assert.equal(popped.stack.entries.length, 0);
+    assert.equal(popped.stack.totalPopped, 1);
+    const empty = popRedoEntry(popped.stack);
+    assert.equal(empty.entry, null);
+  });
+
+  it('plans V57 redo forward with steps undo decrement and redo increment and not-found fallback', () => {
+    const undoConfig = buildUndoStackConfig({ maxSize: 10 });
+    let undoStack: UndoStack = { config: undoConfig, entries: [], totalPushed: 0, totalPopped: 0, oldestEntryId: null, newestEntryId: null };
+    undoStack = pushUndoEntry(undoStack, { id: 'e-1', createdAt: new Date().toISOString(), before: { body: 'old' }, after: { body: 'new' }, label: 'edit chapter' });
+    const redoConfig = buildRedoStackConfig();
+    const redoStack: RedoStack = { config: redoConfig, entries: [], totalPushed: 0, totalPopped: 0, newestEntryId: null };
+    const plan = planRedoForward(undoStack, redoStack, 'e-1');
+    assert.equal(plan.entryId, 'e-1');
+    assert.equal(plan.fromUndo, true);
+    assert.equal(plan.pushedToRedo, true);
+    assert.equal(plan.undoStackSize, 0);
+    assert.equal(plan.redoStackSize, 1);
+    assert.ok(plan.steps.length >= 3);
+    assert.ok(plan.ready);
+
+    const missing = planRedoForward(undoStack, redoStack, 'e-zzz');
+    assert.equal(missing.ready, false);
+    assert.equal(missing.fromUndo, false);
   });
 });

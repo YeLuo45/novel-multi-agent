@@ -427,6 +427,81 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface RedoStackConfig {
+  storageKey: string;
+  maxSize: number;
+  ttlMs: number;
+}
+
+export interface RedoStack {
+  config: RedoStackConfig;
+  entries: UndoEntry[];
+  totalPushed: number;
+  totalPopped: number;
+  newestEntryId: string | null;
+}
+
+export interface RedoForwardPlan {
+  entryId: string;
+  fromUndo: boolean;
+  pushedToRedo: boolean;
+  redoStackSize: number;
+  undoStackSize: number;
+  steps: string[];
+  ready: boolean;
+}
+
+export function buildRedoStackConfig(options: { storageKey?: string; maxSize?: number; ttlMs?: number } = {}): RedoStackConfig {
+  return {
+    storageKey: options.storageKey ?? 'novel-ma:redo',
+    maxSize: Math.max(1, Math.min(500, options.maxSize ?? 50)),
+    ttlMs: Math.max(60_000, options.ttlMs ?? 7 * 24 * 60 * 60 * 1000),
+  };
+}
+
+export function pushRedoEntry(stack: RedoStack, entry: UndoEntry, now: number = Date.now()): RedoStack {
+  const filtered = stack.entries.filter((existing) => now - new Date(existing.createdAt).getTime() < stack.config.ttlMs);
+  const next: UndoEntry[] = [...filtered, entry].slice(-stack.config.maxSize);
+  return {
+    config: stack.config,
+    entries: next,
+    totalPushed: stack.totalPushed + 1,
+    totalPopped: stack.totalPopped,
+    newestEntryId: next[next.length - 1]?.id ?? null,
+  };
+}
+
+export function popRedoEntry(stack: RedoStack): { stack: RedoStack; entry: UndoEntry | null } {
+  if (stack.entries.length === 0) return { stack, entry: null };
+  const last = stack.entries[stack.entries.length - 1] ?? null;
+  if (!last) return { stack, entry: null };
+  return {
+    stack: { ...stack, entries: stack.entries.slice(0, -1), totalPopped: stack.totalPopped + 1 },
+    entry: last,
+  };
+}
+
+export function planRedoForward(undoStack: UndoStack, redoStack: RedoStack, entryId: string): RedoForwardPlan {
+  const entry = undoStack.entries.find((item) => item.id === entryId);
+  if (!entry) {
+    return { entryId, fromUndo: false, pushedToRedo: false, redoStackSize: redoStack.entries.length, undoStackSize: undoStack.entries.length, steps: ['entry not found in undo stack'], ready: false };
+  }
+  const steps = [
+    `从 undo 栈 pop entry ${entry.id}`,
+    `应用 entry.after 到目标 artifact（body/chapterEditor 等）`,
+    `push entry ${entry.id} 到 redo 栈（保留 until 触发新 undo）`,
+    `如 redo 栈超 maxSize，按 FIFO 驱逐最早 entry`,
+  ];
+  return {
+    entryId: entry.id,
+    fromUndo: true,
+    pushedToRedo: true,
+    redoStackSize: redoStack.entries.length + 1,
+    undoStackSize: Math.max(0, undoStack.entries.length - 1),
+    steps,
+    ready: true,
+  };
+}
 export interface KeyboardShortcut {
   id: string;
   key: string;
