@@ -284,6 +284,121 @@ export interface CharacterArcSvg {
   height: number;
 }
 
+export interface DiffLine {
+  kind: 'equal' | 'add' | 'remove';
+  leftLine: string | null;
+  rightLine: string | null;
+  leftIndex: number | null;
+  rightIndex: number | null;
+}
+
+export interface DiffView {
+  lines: DiffLine[];
+  added: number;
+  removed: number;
+  unchanged: number;
+  similarity: number;
+}
+
+export interface ImportWizardStep {
+  index: number;
+  kind: 'parse' | 'validate' | 'normalize' | 'preview' | 'commit';
+  title: string;
+  body: string;
+  ok: boolean;
+  hint?: string;
+}
+
+export interface ImportWizard {
+  ok: boolean;
+  steps: ImportWizardStep[];
+  warnings: string[];
+  schemaVersion: number;
+}
+
+function tokenize(text: string): string[] {
+  return String(text ?? '').split('\n');
+}
+
+export function buildDiffView(left: string, right: string): DiffView {
+  const leftLines = tokenize(left);
+  const rightLines = tokenize(right);
+  const m = leftLines.length;
+  const n = rightLines.length;
+  const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i -= 1) {
+    for (let j = n - 1; j >= 0; j -= 1) {
+      lcs[i]![j] = leftLines[i] === rightLines[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+    }
+  }
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  let added = 0;
+  let removed = 0;
+  let unchanged = 0;
+  while (i < m && j < n) {
+    if (leftLines[i] === rightLines[j]) {
+      lines.push({ kind: 'equal', leftLine: leftLines[i] ?? null, rightLine: rightLines[j] ?? null, leftIndex: i, rightIndex: j });
+      unchanged += 1;
+      i += 1;
+      j += 1;
+    } else if ((lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0)) {
+      lines.push({ kind: 'remove', leftLine: leftLines[i] ?? null, rightLine: null, leftIndex: i, rightIndex: null });
+      removed += 1;
+      i += 1;
+    } else {
+      lines.push({ kind: 'add', leftLine: null, rightLine: rightLines[j] ?? null, leftIndex: null, rightIndex: j });
+      added += 1;
+      j += 1;
+    }
+  }
+  while (i < m) {
+    lines.push({ kind: 'remove', leftLine: leftLines[i] ?? null, rightLine: null, leftIndex: i, rightIndex: null });
+    removed += 1;
+    i += 1;
+  }
+  while (j < n) {
+    lines.push({ kind: 'add', leftLine: null, rightLine: rightLines[j] ?? null, leftIndex: null, rightIndex: j });
+    added += 1;
+    j += 1;
+  }
+  const similarity = (unchanged * 2) / Math.max(1, m + n);
+  return { lines, added, removed, unchanged, similarity };
+}
+
+export function buildImportWizard(rawJson: string): ImportWizard {
+  const warnings: string[] = [];
+  const steps: ImportWizardStep[] = [];
+  let parsed: unknown = null;
+  let parseOk = false;
+  try {
+    parsed = JSON.parse(String(rawJson ?? ''));
+    parseOk = true;
+  } catch (error) {
+    warnings.push(`JSON parse failed: ${(error as Error).message}`);
+  }
+  steps.push({ index: 1, kind: 'parse', title: '1. JSON 解析', body: parseOk ? 'JSON 解析成功' : 'JSON 解析失败', ok: parseOk, hint: parseOk ? undefined : '检查末尾括号 / 引号' });
+  const isObject = parsed && typeof parsed === 'object';
+  steps.push({ index: 2, kind: 'validate', title: '2. Schema 校验', body: isObject ? '对象结构有效' : '非对象结构', ok: Boolean(isObject), hint: isObject ? undefined : '期望 JSON object' });
+  const schemaVersion = isObject ? Number((parsed as { schemaVersion?: unknown }).schemaVersion ?? 2) : 2;
+  const validSchema = schemaVersion === 2;
+  if (!validSchema) warnings.push(`schemaVersion=${schemaVersion} 非 2；将自动归一化`);
+  steps.push({ index: 3, kind: 'normalize', title: '3. Schema 归一化', body: validSchema ? '已是 schemaVersion=2' : `从 ${schemaVersion} 升级到 2`, ok: true, hint: validSchema ? undefined : 'auto-upgrade applied' });
+  const projectId = isObject ? String((parsed as { projectId?: unknown }).projectId ?? '(missing)') : '(missing)';
+  const title = isObject ? String((parsed as { title?: unknown }).title ?? '(no title)') : '(no title)';
+  steps.push({ index: 4, kind: 'preview', title: '4. 预览', body: `projectId=${projectId} · title=${title}`, ok: true });
+  steps.push({ index: 5, kind: 'commit', title: '5. 提交入库', body: parseOk && isObject ? '可写入本地项目库' : '阻断：前置步骤未通过', ok: parseOk && Boolean(isObject) });
+  return { ok: parseOk && Boolean(isObject), steps, warnings, schemaVersion: 2 };
+}
+
+export interface ChapterPacingSvg {
+  svg: string;
+  bars: ChapterPacingBar[];
+  width: number;
+  height: number;
+}
+
 export interface ChapterPacingBar {
   chapter: number;
   title: string;

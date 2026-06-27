@@ -33,6 +33,8 @@ import {
   buildTagIndex,
   searchProjectsIndexed,
   planIndexedDbMigration,
+  buildDiffView,
+  buildImportWizard,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -532,5 +534,49 @@ describe('web-first studio models', () => {
     const empty = planIndexedDbMigration([]);
     assert.ok(empty.warnings.some((line) => line.includes('no items')));
     assert.equal(empty.ready, false);
+  });
+
+  it('builds V46 line-level diff view with equal add remove counts and similarity ratio', () => {
+    const diff = buildDiffView('alpha\nbeta\ngamma', 'alpha\nBETA\ngamma\ndelta');
+    assert.equal(diff.added, 2);
+    assert.equal(diff.removed, 1);
+    assert.equal(diff.unchanged, 2);
+    assert.ok(diff.similarity > 0.5 && diff.similarity < 1);
+    const adds = diff.lines.filter((line) => line.kind === 'add');
+    const removes = diff.lines.filter((line) => line.kind === 'remove');
+    assert.ok(adds.length >= 1 && removes.length >= 1);
+    assert.equal(removes[0]?.leftLine, 'beta');
+    assert.ok(adds.some((line) => line.rightLine === 'BETA'));
+  });
+
+  it('builds V46 identical-text diff with zero adds and removals and similarity=1', () => {
+    const diff = buildDiffView('same\ntext', 'same\ntext');
+    assert.equal(diff.added, 0);
+    assert.equal(diff.removed, 0);
+    assert.equal(diff.unchanged, 2);
+    assert.equal(diff.similarity, 1);
+  });
+
+  it('builds V46 import wizard with 5 steps parse-validate-normalize-preview-commit and warnings', () => {
+    const ok = buildImportWizard(JSON.stringify(sampleArtifacts[0]));
+    assert.equal(ok.ok, true);
+    assert.equal(ok.steps.length, 5);
+    assert.equal(ok.steps[0]?.kind, 'parse');
+    assert.equal(ok.steps[1]?.kind, 'validate');
+    assert.equal(ok.steps[2]?.kind, 'normalize');
+    assert.equal(ok.steps[3]?.kind, 'preview');
+    assert.equal(ok.steps[4]?.kind, 'commit');
+    assert.ok(ok.steps.every((step) => step.title && step.body));
+
+    const bad = buildImportWizard('{not json');
+    assert.equal(bad.ok, false);
+    assert.ok(bad.warnings.length >= 1);
+    assert.equal(bad.steps[0]?.ok, false);
+    assert.equal(bad.steps[4]?.ok, false);
+
+    const legacy = buildImportWizard(JSON.stringify({ projectId: 'old', title: 'legacy', schemaVersion: 1 }));
+    assert.equal(legacy.ok, true);
+    assert.ok(legacy.warnings.some((line) => line.includes('schemaVersion=1')));
+    assert.equal(legacy.steps[2]?.ok, true);
   });
 });

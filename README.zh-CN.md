@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V46 Web Diff 可视化 + 导入向导交互
+
+- `buildDiffView(left, right)`：自实现 LCS（最长公共子序列）算法做行级 diff，返回 `lines`（equal/add/remove 三态）+ `added/removed/unchanged` 计数 + `similarity` 比例（0~1）。零依赖实现，~50 行。
+- `buildImportWizard(rawJson)`：5 步流水线（parse → validate → normalize → preview → commit），每步返回 ok 状态 + body + hint；JSON parse 失败时阻断 commit；schemaVersion≠2 时自动归一化并加 warning。
+- HTML 集成：双 textarea + Diff 按钮 → 行级染色视图（绿/红/灰）+ similarity badge + 加减统计；JSON 输入框 + 向导按钮 → 5 步卡片视图（CSS counter 自增编号），失败步骤红色边框。
+- vm sandbox 兼容：2 个函数通过 `Object.assign` + typeof guard 注入。
+
 ## V45 Web 项目库增强（IndexedDB 迁移 + 版本树 + 标签 + 全文搜索）
 
 - `buildRevisionTree(items)`：按 projectId 分组生成树状版本节点，origin root + 按 savedAt 排序的 revision children，parentId 链向上一个节点；纯函数可在 CLI 和 Web 共用。
