@@ -86,6 +86,23 @@
       .panel-view .metric-card .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
       .panel-view .note { background: color-mix(in srgb, var(--panel) 70%, white); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
       .panel-view .note pre { margin: 8px 0 0; padding: 0; background: transparent; color: var(--text); min-height: 0; }
+      .editor-meta { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+      .editor-actions { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+      .editor-actions label { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+      .editor-actions input { width: 96px; }
+      .editor-sidebar { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .editor-sidebar .ctx-card { background: color-mix(in srgb, var(--panel) 70%, white); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+      .editor-sidebar .ctx-card h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+      .editor-sidebar .ctx-card ul { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+      .editor-sidebar .ctx-card li { padding: 2px 0; display: flex; justify-content: space-between; gap: 6px; }
+      .editor-sidebar .ctx-card li .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+      .editor-sidebar .ctx-card li[data-tone="pass"] .dot { background: #16a34a; }
+      .editor-sidebar .ctx-card li[data-tone="warn"] .dot { background: #d97706; }
+      .editor-sidebar .ctx-card li[data-tone="fail"] .dot { background: #b91c1c; }
+      .revision-list { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+      .revision-list li { padding: 4px 0; border-bottom: 1px dashed var(--border); }
+      .revision-list li:last-child { border-bottom: 0; }
+      .revision-list li code { font-size: 11px; color: var(--text); }
     </style>
   </head>
   <body>
@@ -103,6 +120,29 @@
       <nav id="web-nav-tabs" class="nav-tabs" aria-label="主导航"></nav>
       <div id="web-dashboard-summary" class="overlay" data-open="false" hidden></div>
       <div class="grid">
+        <section>
+          <h2>章节正文编辑器</h2>
+          <textarea id="chapter-editor" rows="10" placeholder="在这里写当前章节正文……"></textarea>
+          <div class="editor-meta">
+            <span id="editor-word-count" class="badge" data-tone="info">字数 0</span>
+            <span id="editor-progress-text" class="badge" data-tone="info">0%</span>
+            <span id="editor-fingerprint" class="hint">指纹 fp-0</span>
+          </div>
+          <div class="progress-row" id="editor-progress-row" data-tone="fail">
+            <span class="label">目标</span>
+            <div class="track"><div class="fill" id="editor-progress-fill" style="width:0%"></div></div>
+            <span class="value" id="editor-progress-value">0/0</span>
+          </div>
+          <div class="editor-actions">
+            <label>目标字数 <input id="editor-target" value="900" /></label>
+            <button id="editor-save" class="secondary">保存到项目库（自动含 fingerprint）</button>
+          </div>
+          <aside id="editor-sidebar" class="editor-sidebar"></aside>
+          <details>
+            <summary>历史版本（最多 10 条）</summary>
+            <ul id="editor-revisions" class="revision-list"></ul>
+          </details>
+        </section>
         <section>
           <h2>根据主题创建</h2>
           <input id="theme" value="月球图书馆的守夜人与失忆AI" />
@@ -985,7 +1025,7 @@
         }, { passive: false });
       }
 
-      window.NovelWorkbench = Object.assign({}, { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, renderInteractivePanel, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters }, { buildInteractivePanel: (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : () => null) });
+      window.NovelWorkbench = Object.assign({}, { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, renderInteractivePanel, renderChapterEditor, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters }, { buildInteractivePanel: (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : () => null), buildChapterEditor: (typeof buildChapterEditor === 'function' ? buildChapterEditor : () => null), computeWordStats: (typeof computeWordStats === 'function' ? computeWordStats : () => null), planChapterSave: (typeof planChapterSave === 'function' ? planChapterSave : () => null), buildChapterContext: (typeof buildChapterContext === 'function' ? buildChapterContext : () => null), appendChapterRevision: (typeof appendChapterRevision === 'function' ? appendChapterRevision : () => null) });
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -1139,6 +1179,97 @@
         download.disabled = panel.raw == null;
       }
 
+      function renderChapterEditor() {
+        const wb = window.NovelWorkbench;
+        if (!wb?.buildChapterEditor) return;
+        const editor = document.getElementById('chapter-editor');
+        const targetEl = document.getElementById('editor-target');
+        const sidebar = document.getElementById('editor-sidebar');
+        const wcEl = document.getElementById('editor-word-count');
+        const progText = document.getElementById('editor-progress-text');
+        const progRow = document.getElementById('editor-progress-row');
+        const progFill = document.getElementById('editor-progress-fill');
+        const progVal = document.getElementById('editor-progress-value');
+        const fpEl = document.getElementById('editor-fingerprint');
+        const revList = document.getElementById('editor-revisions');
+        const body = editor?.value ?? '';
+        const target = Math.max(1, Number(targetEl?.value) || 900);
+        const artifact = currentArtifact || createFromTheme(document.getElementById('theme').value);
+        const data = wb.buildChapterEditor({ artifact, body, target, revisions: editorRevisions });
+
+        if (wcEl) { wcEl.textContent = `字数 ${data.wordCount}`; wcEl.dataset.tone = data.tone; }
+        if (progText) { progText.textContent = `${data.progress}%`; progText.dataset.tone = data.tone; }
+        if (progRow) progRow.dataset.tone = data.tone;
+        if (progFill) progFill.style.width = `${Math.max(0, Math.min(100, data.progress))}%`;
+        if (progVal) progVal.textContent = `${data.wordCount}/${data.target}`;
+        if (fpEl) fpEl.textContent = `指纹 ${data.savePlan.fingerprint}`;
+
+        if (sidebar) {
+          sidebar.innerHTML = '';
+          const cards = [
+            { title: '角色', tone: 'info', items: data.context.characters.map((c) => ({ label: c.name, value: `${c.mentions} 次`, tone: 'info' })) },
+            { title: '伏笔', tone: 'warn', items: data.context.foreshadowing.map((f) => ({ label: f.name, value: f.status, tone: f.status === 'recovered' ? 'pass' : f.status === 'overdue' ? 'fail' : 'warn' })) },
+            { title: '文风', tone: 'info', items: data.context.styleFingerprint.map((s) => ({ label: s, value: '', tone: 'info' })) },
+          ];
+          for (const card of cards) {
+            const wrap = document.createElement('div');
+            wrap.className = 'ctx-card';
+            const h4 = document.createElement('h4');
+            h4.textContent = card.title;
+            const ul = document.createElement('ul');
+            for (const item of card.items) {
+              const li = document.createElement('li');
+              li.dataset.tone = item.tone;
+              const dot = document.createElement('span');
+              dot.className = 'dot';
+              const label = document.createElement('span');
+              label.textContent = item.label;
+              li.append(dot, label);
+              if (item.value) {
+                const v = document.createElement('span');
+                v.textContent = item.value;
+                li.appendChild(v);
+              }
+              ul.appendChild(li);
+            }
+            wrap.append(h4, ul);
+            sidebar.appendChild(wrap);
+          }
+        }
+
+        if (revList) {
+          revList.innerHTML = '';
+          for (const rev of [...data.revisions].reverse()) {
+            const li = document.createElement('li');
+            li.innerHTML = `<code>${rev.id}</code> · ${new Date(rev.savedAt).toLocaleString()} · ${rev.wordCount} 字 · ${rev.excerpt}`;
+            revList.appendChild(li);
+          }
+        }
+
+        return data;
+      }
+
+      const editorRevisions = [];
+
+      function bindChapterEditor() {
+        const editor = document.getElementById('chapter-editor');
+        const targetEl = document.getElementById('editor-target');
+        const saveBtn = document.getElementById('editor-save');
+        if (editor) editor.addEventListener('input', renderChapterEditor);
+        if (targetEl) targetEl.addEventListener('input', renderChapterEditor);
+        if (saveBtn) saveBtn.onclick = () => {
+          const data = renderChapterEditor();
+          if (!data) return;
+          const updated = { ...currentArtifact, ...data.artifact, chapterTitle: data.artifact.chapterTitle || `第${Math.floor(Math.random() * 99) + 1}章 编辑版`, updatedAt: new Date().toISOString(), savedAt: new Date().toISOString(), artifact: { ...data.artifact.artifact, wordCount: data.wordCount } };
+          currentArtifact = updated;
+          library.save(updated);
+          editorRevisions.push({ id: `rev-${Date.now()}`, savedAt: updated.savedAt, wordCount: data.wordCount, excerpt: data.body.replace(/\s+/g, ' ').trim().slice(0, 80) });
+          while (editorRevisions.length > 10) editorRevisions.shift();
+          renderLibrary();
+          renderChapterEditor();
+        };
+      }
+
       function renderLibrary() {
         const items = library.list();
         libraryView.innerHTML = items.length ? '' : '暂无保存项目。';
@@ -1214,6 +1345,7 @@
       renderLibrary();
       bindWebNavigation();
       bindWebShortcuts();
+      bindChapterEditor();
     </script>
   </body>
 </html>

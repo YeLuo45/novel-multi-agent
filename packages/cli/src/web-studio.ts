@@ -125,6 +125,130 @@ export interface InteractivePanel {
   raw: unknown;
 }
 
+export interface ChapterEditor {
+  artifact: StudioArtifact;
+  body: string;
+  target: number;
+  wordCount: number;
+  remaining: number;
+  progress: number;
+  tone: 'pass' | 'warn' | 'fail' | 'info';
+  context: ChapterContext;
+  savePlan: ChapterSavePlan;
+  revisions: ChapterRevision[];
+}
+
+export interface ChapterContext {
+  characters: Array<{ name: string; mentions: number }>;
+  foreshadowing: Array<{ name: string; status: 'recovered' | 'open' | 'overdue' | 'missing' }>;
+  styleFingerprint: string[];
+  recentSummary: string;
+}
+
+export interface ChapterSavePlan {
+  projectId: string;
+  storageKey: string;
+  previousSavedAt: string | null;
+  rollbackToken: string;
+  bodyWordDelta: number;
+  fingerprint: string;
+}
+
+export interface ChapterRevision {
+  id: string;
+  savedAt: string;
+  wordCount: number;
+  excerpt: string;
+}
+
+function countWords(text: string): number {
+  if (!text) return 0;
+  const source = String(text);
+  const hanChars = source.match(/[\p{Script=Han}]/gu) ?? [];
+  const stripped = source.replace(/[\p{Script=Han}]/gu, ' ');
+  const latinWords = stripped.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return hanChars.length + latinWords.length;
+}
+
+function fingerprintOf(text: string): string {
+  const sample = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  let hash = 0;
+  for (let i = 0; i < sample.length; i += 1) hash = ((hash << 5) - hash + sample.charCodeAt(i)) | 0;
+  return `fp-${(hash >>> 0).toString(16)}`;
+}
+
+function recentSummaryOf(artifact: StudioArtifact): string {
+  return artifact.artifact?.chapterSummary ?? artifact.artifact?.continuationContext ?? artifact.chapterTitle ?? '';
+}
+
+export function buildChapterContext(artifact: StudioArtifact): ChapterContext {
+  const characters = (artifact.artifact?.characters ?? []).map((entry) => {
+    const [name = entry, mentionsText = '0'] = entry.split(':');
+    return { name: name.trim(), mentions: Math.max(0, Number(mentionsText.replace(/[^\d]/g, '')) || 0) };
+  });
+  const foreshadowing = (artifact.artifact?.foreshadowing ?? []).map((entry) => {
+    const [name = entry, status = 'open'] = entry.split(':');
+    return { name: name.trim(), status: status.trim().toLowerCase() as 'recovered' | 'open' | 'overdue' | 'missing' };
+  });
+  return {
+    characters,
+    foreshadowing,
+    styleFingerprint: artifact.artifact?.style ?? ['克制、悬疑、带微光', '短句推进'],
+    recentSummary: recentSummaryOf(artifact),
+  };
+}
+
+export function computeWordStats(text: string, target: number): { wordCount: number; remaining: number; progress: number; tone: 'pass' | 'warn' | 'fail' | 'info' } {
+  const wordCount = countWords(text);
+  const safeTarget = Math.max(1, target);
+  const progress = Math.round((wordCount / safeTarget) * 100);
+  const remaining = Math.max(0, safeTarget - wordCount);
+  const tone = progress >= 100 ? 'pass' : progress >= 50 ? 'warn' : 'fail';
+  return { wordCount, remaining, progress, tone };
+}
+
+export function planChapterSave(artifact: StudioArtifact, body: string, options: { target?: number; previousSavedAt?: string | null } = {}): ChapterSavePlan {
+  const target = options.target ?? 900;
+  const stats = computeWordStats(body, target);
+  const previousWordCount = (artifact.artifact as { wordCount?: number } | undefined)?.wordCount ?? 0;
+  const previousSavedAt = options.previousSavedAt ?? (artifact as { savedAt?: string }).savedAt ?? null;
+  return {
+    projectId: artifact.projectId,
+    storageKey: 'novel-ma:artifacts',
+    previousSavedAt,
+    rollbackToken: `rollback-${artifact.projectId}-${Date.now()}`,
+    bodyWordDelta: stats.wordCount - previousWordCount,
+    fingerprint: fingerprintOf(body),
+  };
+}
+
+export function buildChapterEditor(input: { artifact: StudioArtifact; body: string; target?: number; revisions?: ChapterRevision[] }): ChapterEditor {
+  const target = Math.max(1, input.target ?? 900);
+  const stats = computeWordStats(input.body, target);
+  return {
+    artifact: input.artifact,
+    body: input.body,
+    target,
+    wordCount: stats.wordCount,
+    remaining: stats.remaining,
+    progress: stats.progress,
+    tone: stats.tone,
+    context: buildChapterContext(input.artifact),
+    savePlan: planChapterSave(input.artifact, input.body, { target }),
+    revisions: input.revisions ?? [],
+  };
+}
+
+export function appendChapterRevision(revisions: ChapterRevision[], body: string): ChapterRevision[] {
+  const next: ChapterRevision = {
+    id: `rev-${Date.now()}`,
+    savedAt: new Date().toISOString(),
+    wordCount: countWords(body),
+    excerpt: body.replace(/\s+/g, ' ').trim().slice(0, 80),
+  };
+  return [...revisions, next].slice(-10);
+}
+
 export interface InteractivePanelSection {
   kind: 'metric' | 'progress' | 'list' | 'tree' | 'bar' | 'note';
   heading?: string;

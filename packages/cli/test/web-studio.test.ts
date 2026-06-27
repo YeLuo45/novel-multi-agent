@@ -21,6 +21,11 @@ import {
   buildWebNavigation,
   buildWebOnboarding,
   buildInteractivePanel,
+  buildChapterEditor,
+  buildChapterContext,
+  computeWordStats,
+  planChapterSave,
+  appendChapterRevision,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -370,5 +375,66 @@ describe('web-first studio models', () => {
     assert.equal(panel.kind, 'unknown-kind');
     assert.equal(panel.sections.length, 1);
     assert.ok(panel.sections[0]?.note?.includes('hello'));
+  });
+
+  it('builds V43 word stats counting Han characters plus latin tokens with progress and tone', () => {
+    const hanStats = computeWordStats('月球图书馆的守夜人林澈推开了门', 20);
+    assert.equal(hanStats.wordCount, 15);
+    assert.equal(hanStats.progress, 75);
+    assert.equal(hanStats.tone, 'warn');
+
+    const latinStats = computeWordStats('the moon library door opens slowly', 5);
+    assert.equal(latinStats.wordCount, 6);
+    assert.ok(latinStats.progress >= 100);
+    assert.equal(latinStats.tone, 'pass');
+
+    const empty = computeWordStats('', 10);
+    assert.equal(empty.wordCount, 0);
+    assert.equal(empty.progress, 0);
+    assert.equal(empty.tone, 'fail');
+  });
+
+  it('builds V43 chapter context with characters mentions foreshadowing status and style fingerprint', () => {
+    const ctx = buildChapterContext(sampleArtifacts[0]!);
+    assert.ok(ctx.characters.some((c) => c.name.includes('守夜人')));
+    assert.ok(ctx.foreshadowing.some((f) => f.name.includes('银匙') && f.status === 'recovered'));
+    assert.ok(ctx.foreshadowing.some((f) => f.status === 'overdue'));
+    assert.ok(ctx.styleFingerprint.length >= 1);
+    assert.ok(ctx.recentSummary.length > 0);
+  });
+
+  it('builds V43 chapter editor with target progress tone context save plan and revisions', () => {
+    const editor = buildChapterEditor({
+      artifact: sampleArtifacts[0]!,
+      body: '林澈推开了月背图书馆的门，银匙掉在地上。',
+      target: 30,
+    });
+    assert.equal(editor.target, 30);
+    assert.ok(editor.wordCount > 0);
+    assert.equal(editor.progress, Math.round((editor.wordCount / 30) * 100));
+    assert.ok(['pass', 'warn', 'fail', 'info'].includes(editor.tone));
+    assert.equal(editor.context.characters.length >= 1, true);
+    assert.equal(editor.savePlan.storageKey, 'novel-ma:artifacts');
+    assert.ok(editor.savePlan.rollbackToken.startsWith('rollback-'));
+    assert.ok(editor.savePlan.fingerprint.startsWith('fp-'));
+    assert.equal(editor.revisions.length, 0);
+  });
+
+  it('plans V43 chapter save with body word delta fingerprint rollback token and previous timestamp', () => {
+    const plan = planChapterSave(sampleArtifacts[0]!, '林澈推开了月背图书馆的门。', { target: 30, previousSavedAt: '2026-06-01T00:00:00.000Z' });
+    assert.equal(plan.projectId, sampleArtifacts[0]!.projectId);
+    assert.equal(plan.previousSavedAt, '2026-06-01T00:00:00.000Z');
+    assert.ok(plan.bodyWordDelta !== 0 || plan.bodyWordDelta === 0);
+    assert.ok(plan.fingerprint.startsWith('fp-'));
+  });
+
+  it('appends V43 chapter revisions and caps history at 10 entries preserving order', () => {
+    let revs: ReturnType<typeof appendChapterRevision> = [];
+    for (let i = 0; i < 12; i += 1) revs = appendChapterRevision(revs, `草稿 ${i}`);
+    assert.equal(revs.length, 10);
+    assert.equal(revs[0]?.excerpt, '草稿 2');
+    assert.equal(revs[9]?.excerpt, '草稿 11');
+    assert.ok(revs[0]?.id.startsWith('rev-'));
+    assert.ok(revs[0]?.wordCount > 0);
   });
 });

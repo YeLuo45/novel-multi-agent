@@ -49,6 +49,17 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V43 Web 章节正文编辑器 + 续写上下文侧栏
+
+- `buildChapterContext(artifact)`：从 artifact 提取角色（含出场次数）/ 伏笔（recovered/open/overdue/missing 状态）/ 文风指纹 / 最近章节摘要。
+- `computeWordStats(text, target)`：准确统计 Han 字符 + 拉丁词数（先剥离 Han 后再按 `[\p{L}\p{N}]+` 切分，避免 Han 被 `\p{L}` 重复计入），返回 wordCount / remaining / progress / tone。
+- `planChapterSave(artifact, body)`：生成 rollback token、fingerprint（`fp-<hex>` 哈希）、bodyWordDelta、storageKey（`novel-ma:artifacts`）。
+- `buildChapterEditor({artifact, body, target, revisions})`：聚合上面三者，返回编辑器完整状态模型。
+- `appendChapterRevision(revisions, body)`：保存后追加版本记录，最多保留 10 条（FIFO 淘汰）。
+- HTML 集成：textarea + 字数徽章 + 进度条（目标/完成度/tone 着色）+ 续写上下文三卡片（角色 / 伏笔 / 文风）+ 历史版本折叠列表。
+- 自动保存到 localStorage（`novel-ma:artifacts`）：点击"保存到项目库"按钮后 currentArtifact 立即更新，editorRevisions 追加。
+- vm sandbox 兼容：`buildChapterEditor / computeWordStats / planChapterSave / buildChapterContext / appendChapterRevision` 通过 `Object.assign` + typeof guard 注入。
+
 ## V42 Web 交互式工作流面板（替代 pre 输出 JSON）
 
 - `buildInteractivePanel(kind, payload)` 把 5 个核心面板（quality / provider-readiness / longform-os / narrative-analytics / foreshadowing）从 JSON 文本升级为带 badges + progress / bar / list / tree / metric / note 6 类 section 的组件视图。
