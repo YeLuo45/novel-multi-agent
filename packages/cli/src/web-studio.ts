@@ -427,6 +427,86 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export type ThemeName = 'light' | 'dark' | 'sepia' | 'nord';
+
+export interface ThemeTokens {
+  bg: string;
+  panel: string;
+  text: string;
+  muted: string;
+  border: string;
+  accent: string;
+  code: string;
+  codeText: string;
+  success: string;
+  warn: string;
+  danger: string;
+}
+
+export interface ThemeConfig {
+  name: ThemeName;
+  label: string;
+  storageKey: string;
+  tokens: ThemeTokens;
+  ready: boolean;
+  warning?: string;
+}
+
+export interface ThemeMigrationPlan {
+  fromTheme: ThemeName;
+  toTheme: ThemeName;
+  steps: string[];
+  cssVariableBlock: string;
+  estimatedDurationMs: number;
+  preserveUserPreference: boolean;
+  ready: boolean;
+}
+
+const THEME_REGISTRY: Record<ThemeName, { label: string; tokens: ThemeTokens }> = {
+  light: { label: 'Light', tokens: { bg: '#ffffff', panel: '#f6f8fa', text: '#1f2328', muted: '#57606a', border: '#d0d7de', accent: '#0969da', code: '#f6f8fa', codeText: '#1f2328', success: '#1a7f37', warn: '#9a6700', danger: '#cf222e' } },
+  dark: { label: 'Dark', tokens: { bg: '#0d1117', panel: '#161b22', text: '#e6edf3', muted: '#7d8590', border: '#30363d', accent: '#2f81f7', code: '#161b22', codeText: '#e6edf3', success: '#3fb950', warn: '#d29922', danger: '#f85149' } },
+  sepia: { label: 'Sepia', tokens: { bg: '#f4ecd8', panel: '#e8dfc5', text: '#5b4636', muted: '#8a7159', border: '#c7b48b', accent: '#a0522d', code: '#e8dfc5', codeText: '#5b4636', success: '#4f7d3a', warn: '#b8860b', danger: '#8b0000' } },
+  nord: { label: 'Nord', tokens: { bg: '#2e3440', panel: '#3b4252', text: '#eceff4', muted: '#7b88a1', border: '#434c5e', accent: '#88c0d0', code: '#3b4252', codeText: '#eceff4', success: '#a3be8c', warn: '#ebcb8b', danger: '#bf616a' } },
+};
+
+export function buildThemeConfig(themeName: ThemeName, options: { storageKey?: string; known?: boolean } = {}): ThemeConfig {
+  const registry = THEME_REGISTRY[themeName];
+  if (!registry) return { name: themeName as ThemeName, label: 'unknown', storageKey: options.storageKey ?? 'novel-ma:theme', tokens: THEME_REGISTRY.dark.tokens, ready: false, warning: `unknown theme '${themeName}'; falling back to dark` };
+  return {
+    name: themeName,
+    label: registry.label,
+    storageKey: options.storageKey ?? 'novel-ma:theme',
+    tokens: registry.tokens,
+    ready: options.known !== false,
+  };
+}
+
+export function buildThemeOptions(currentTheme?: ThemeName): ThemeConfig[] {
+  const themes: ThemeName[] = ['light', 'dark', 'sepia', 'nord'];
+  return themes.map((theme) => buildThemeConfig(theme, { known: true, storageKey: currentTheme === theme ? 'novel-ma:theme' : `novel-ma:theme:${theme}` }));
+}
+
+export function planThemeMigration(fromTheme: ThemeName, toTheme: ThemeName, options: { preserveUserPreference?: boolean; storageKey?: string } = {}): ThemeMigrationPlan {
+  const fromConfig = buildThemeConfig(fromTheme);
+  const toConfig = buildThemeConfig(toTheme);
+  const steps = [
+    `保存用户当前偏好到 localStorage '${options.storageKey ?? 'novel-ma:theme'}'`,
+    `更新 document.documentElement.dataset.theme = '${toTheme}'`,
+    `应用 ${toConfig.tokens.bg} 背景 + ${toConfig.tokens.text} 文本 + ${toConfig.tokens.accent} 强调色`,
+    `重新渲染 V41-V59 所有依赖主题的 SVG + 按钮 + 边框`,
+    `如 preserveUserPreference=true 则记录用户在切换前的偏好以便回滚`,
+  ];
+  const cssVariableBlock = `:root[data-theme='${toTheme}'] { --bg: ${toConfig.tokens.bg}; --panel: ${toConfig.tokens.panel}; --text: ${toConfig.tokens.text}; --muted: ${toConfig.tokens.muted}; --border: ${toConfig.tokens.border}; --accent: ${toConfig.tokens.accent}; --code: ${toConfig.tokens.code}; --code-text: ${toConfig.tokens.codeText}; --success: ${toConfig.tokens.success}; --warn: ${toConfig.tokens.warn}; --danger: ${toConfig.tokens.danger}; }`;
+  return {
+    fromTheme,
+    toTheme,
+    steps,
+    cssVariableBlock,
+    estimatedDurationMs: 50,
+    preserveUserPreference: options.preserveUserPreference ?? true,
+    ready: fromTheme !== toTheme || fromTheme === toTheme,
+  };
+}
 export interface ReplCommand {
   name: string;
   args: string[];

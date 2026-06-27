@@ -78,6 +78,9 @@ import {
   planReplDispatch,
   buildReplHelp,
   planCliCommand,
+  buildThemeConfig,
+  buildThemeOptions,
+  planThemeMigration,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1251,5 +1254,52 @@ describe('web-first studio models', () => {
 
     const unknown = planCliCommand('unknown-cmd');
     assert.equal(unknown.ready, false);
+  });
+
+  it('builds V62 theme config for light dark sepia nord with 11 tokens each and storage key', () => {
+    const themes = ['light', 'dark', 'sepia', 'nord'] as const;
+    for (const name of themes) {
+      const config = buildThemeConfig(name);
+      assert.equal(config.name, name);
+      assert.ok(config.label.length > 0);
+      assert.equal(config.storageKey, 'novel-ma:theme');
+      assert.equal(config.tokens.bg.length > 0, true);
+      assert.ok(config.tokens.panel && config.tokens.text && config.tokens.border);
+      assert.ok(config.tokens.code && config.tokens.codeText);
+      assert.ok(config.tokens.success && config.tokens.warn && config.tokens.danger);
+      assert.equal(config.ready, true);
+    }
+    const unknown = buildThemeConfig('not-a-theme' as ThemeName);
+    assert.equal(unknown.ready, false);
+    assert.ok(unknown.warning?.includes('unknown theme'));
+  });
+
+  it('builds V62 theme options returning 4 configs with current theme marked active', () => {
+    const options = buildThemeOptions('dark');
+    assert.equal(options.length, 4);
+    const names = options.map((o) => o.name);
+    assert.ok(names.includes('light'));
+    assert.ok(names.includes('dark'));
+    assert.ok(names.includes('sepia'));
+    assert.ok(names.includes('nord'));
+    const active = options.find((o) => o.storageKey === 'novel-ma:theme');
+    assert.ok(active);
+  });
+
+  it('plans V62 theme migration with css variable block steps and preserve preference', () => {
+    const plan = planThemeMigration('dark', 'light', { preserveUserPreference: true, storageKey: 'novel-ma:theme' });
+    assert.equal(plan.fromTheme, 'dark');
+    assert.equal(plan.toTheme, 'light');
+    assert.ok(plan.cssVariableBlock.includes("--bg:"));
+    assert.ok(plan.cssVariableBlock.includes('--text:'));
+    assert.ok(plan.cssVariableBlock.includes('--accent:'));
+    assert.equal(plan.preserveUserPreference, true);
+    assert.equal(plan.estimatedDurationMs, 50);
+    assert.ok(plan.steps.length >= 3);
+    assert.ok(plan.ready);
+    assert.ok(plan.steps[0]?.includes('novel-ma:theme'));
+
+    const self = planThemeMigration('light', 'light');
+    assert.equal(self.ready, true);
   });
 });

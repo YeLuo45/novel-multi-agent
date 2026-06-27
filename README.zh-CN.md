@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V62 主题持久化（light/dark/sepia/nord + 跨刷新 + 11 token）
+
+- `buildThemeConfig(themeName, options)`：从 THEME_REGISTRY 查 light/dark/sepia/nord 之一返回 `{name, label, storageKey, tokens{11字段}, ready, warning?}`，unknown theme 降级到 dark。
+- `buildThemeOptions(currentTheme?)`：返回 4 个 ThemeConfig[]，active theme 的 storageKey 标记为 `novel-ma:theme`，其他为 `novel-ma:theme:<name>`。
+- `planThemeMigration(fromTheme, toTheme, options)`：返回 `{fromTheme, toTheme, steps[5], cssVariableBlock, estimatedDurationMs, preserveUserPreference, ready}`；cssVariableBlock 是可直接 eval 的 `:root[data-theme='light'] { --bg: ...; }`。
+- 11 token 字段：bg/panel/text/muted/border/accent/code/codeText/success/warn/danger。
+- HTML 集成：4 个主题切换按钮（light/dark/sepia/nord）+ 1 个 migration 计划按钮 + DOMContentLoaded 自动恢复用户偏好；通过 `applyThemeLive(theme)` 写 `document.documentElement.dataset.theme` + `localStorage` `novel-ma:theme`。
+- 真实持久化：刷新页面后 `loadThemeLive()` 从 localStorage 恢复上次主题。
+
 ## V61 CLI REPL 调度器（21 命令 + 解析 + 派发 + allowlist + help）
 
 - `parseReplCommand(input)`：解析 `command --flag=value arg` 字符串为 `{name, args[], flags{}, raw}`。
