@@ -43,6 +43,8 @@ import {
   buildServiceWorkerPlan,
   renderServiceWorkerScript,
   assessOfflineCapability,
+  buildPipelineTimelineSvg,
+  buildAgentTraceView,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -676,5 +678,40 @@ describe('web-first studio models', () => {
     const missing = assessOfflineCapability({ manifest: null, plan: null });
     assert.ok(missing.warnings.some((line) => line.includes('manifest missing')));
     assert.equal(missing.hasManifest, false);
+  });
+
+  it('builds V49 pipeline timeline SVG with 5 agent roles status colors and total duration', () => {
+    const steps = [
+      { role: 'planner', label: '规划', durationMs: 120, status: 'done' },
+      { role: 'worldbuilder', label: '设定', durationMs: 200, status: 'done' },
+      { role: 'writer', label: '写作', durationMs: 800, status: 'running' },
+      { role: 'editor', label: '审校', durationMs: 150, status: 'pending' },
+      { role: 'continuity', label: '连贯', durationMs: 0, status: 'pending' },
+    ];
+    const timeline = buildPipelineTimelineSvg(steps);
+    assert.equal(timeline.steps.length, 5);
+    assert.equal(timeline.totalDurationMs, 1270);
+    assert.ok(timeline.svg.startsWith('<svg'));
+    assert.ok(timeline.svg.includes('planner'.length > 0 ? '规划' : ''));
+    assert.ok(timeline.svg.includes('#16a34a') || timeline.svg.includes('#2563eb'));
+    assert.ok(timeline.svg.includes('120ms'));
+  });
+
+  it('builds V49 agent trace view with duration artifact count output excerpt and timestamps', () => {
+    const trace = {
+      role: 'writer',
+      input: 'continue chapter 3',
+      output: '林澈推开了门，月背图书馆的银匙在地上闪烁。',
+      startedAt: '2026-06-27T00:00:00.000Z',
+      endedAt: '2026-06-27T00:00:01.500Z',
+      artifacts: [{ key: 'draft', preview: '第3章 线索的回声 …' }, { key: 'memory', preview: 'role: 主角' }],
+    };
+    const view = buildAgentTraceView(trace);
+    assert.equal(view.role, 'writer');
+    assert.equal(view.durationMs, 1500);
+    assert.equal(view.artifactCount, 2);
+    assert.deepEqual(view.artifactKeys, ['draft', 'memory']);
+    assert.ok(view.outputExcerpt.includes('银匙'));
+    assert.equal(view.startedAt, '2026-06-27T00:00:00.000Z');
   });
 });

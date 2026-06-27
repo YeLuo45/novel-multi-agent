@@ -427,6 +427,83 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface PipelineStep {
+  role: 'planner' | 'worldbuilder' | 'writer' | 'editor' | 'continuity' | 'test' | string;
+  label: string;
+  durationMs: number;
+  status: 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+  outputKey?: string;
+}
+
+export interface PipelineTimelineSvg {
+  svg: string;
+  steps: PipelineStep[];
+  totalDurationMs: number;
+  width: number;
+  height: number;
+}
+
+export interface AgentTrace {
+  role: string;
+  input: string;
+  output: string;
+  startedAt: string;
+  endedAt: string;
+  artifacts: Array<{ key: string; preview: string }>;
+}
+
+export interface AgentTraceView {
+  role: string;
+  durationMs: number;
+  artifactCount: number;
+  artifactKeys: string[];
+  outputExcerpt: string;
+  startedAt: string;
+  endedAt: string;
+}
+
+export function buildPipelineTimelineSvg(steps: PipelineStep[]): PipelineTimelineSvg {
+  const width = 480;
+  const rowHeight = 38;
+  const padding = 24;
+  const labelWidth = 110;
+  const height = padding * 2 + Math.max(1, steps.length) * rowHeight;
+  const maxDuration = Math.max(1, ...steps.map((step) => step.durationMs));
+  const totalDurationMs = steps.reduce((sum, step) => sum + step.durationMs, 0);
+  const colorByStatus: Record<PipelineStep['status'], string> = {
+    pending: '#94a3b8',
+    running: '#2563eb',
+    done: '#16a34a',
+    failed: '#b91c1c',
+    skipped: '#64748b',
+  };
+  const stepMarkup = steps.map((step, index) => {
+    const y = padding + index * rowHeight;
+    const x = labelWidth;
+    const barWidth = Math.max(8, Math.round((step.durationMs / maxDuration) * (width - labelWidth - padding)));
+    const color = colorByStatus[step.status];
+    return `<g><text x="0" y="${y + 14}" font-size="12" fill="currentColor">${svgEscape(step.label)}</text><rect x="${x}" y="${y + 4}" width="${barWidth}" height="20" rx="4" fill="${color}" fill-opacity="0.7" /><text x="${x + barWidth + 6}" y="${y + 18}" font-size="10" fill="currentColor">${step.durationMs}ms · ${step.status}</text></g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agent pipeline 时间线">${stepMarkup}</svg>`;
+  return { svg, steps, totalDurationMs, width, height };
+}
+
+export function buildAgentTraceView(trace: AgentTrace): AgentTraceView {
+  const started = new Date(trace.startedAt);
+  const ended = new Date(trace.endedAt);
+  const durationMs = Math.max(0, ended.getTime() - started.getTime());
+  const outputExcerpt = String(trace.output ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return {
+    role: trace.role,
+    durationMs,
+    artifactCount: trace.artifacts?.length ?? 0,
+    artifactKeys: (trace.artifacts ?? []).map((artifact) => artifact.key),
+    outputExcerpt,
+    startedAt: trace.startedAt,
+    endedAt: trace.endedAt,
+  };
+}
+
 export interface OfflineCapabilityReport {
   hasManifest: boolean;
   hasServiceWorker: boolean;

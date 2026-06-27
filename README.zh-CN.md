@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V49 Web Agent Pipeline 时间线 + Trace 视图
+
+- `buildPipelineTimelineSvg(steps)`：横向 Gantt SVG，6 个角色（planner/worldbuilder/writer/editor/continuity/test），按 `durationMs/maxDuration` 归一化 bar 宽度，按 status 着色（pending 灰/running 蓝/done 绿/failed 红/skipped 灰）。
+- `buildAgentTraceView(trace)`：把 AgentTrace 结构压缩成视图（durationMs = endedAt - startedAt、artifactCount、artifactKeys[]、outputExcerpt 前 120 字）。
+- HTML 集成：2 个 inline 按钮（pipeline 时间线 + writer trace），SVG 渲染到 `.svg-frame`，trace 渲染为 badge + note。
+- vm sandbox 兼容：2 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V48 Web PWA（manifest + sw.js + 离线能力评估）
 
 - `buildPwaManifest()`：生成标准 W3C manifest（含 name/shortName/startUrl/display/themeColor/backgroundColor/icons[]），默认 192/512 双尺寸。
