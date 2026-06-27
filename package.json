@@ -11,7 +11,9 @@
     "coverage:incremental": "node scripts/incremental-coverage.mjs",
     "verify:readme": "node scripts/verify-readme.mjs",
     "bootstrap": "npm run cli -- new '月球图书馆的守夜人与失忆AI' --chapters 3 --words 900",
-    "cli": "npm run cli -w @novel-ma/cli --"
+    "cli": "npm run cli -w @novel-ma/cli --",
+    "web": "node scripts/open.mjs apps/web/index.html",
+    "tui": "node scripts/open.mjs apps/tui/index.html"
   },
   "devDependencies": {
     "tsx": "^4.20.3",

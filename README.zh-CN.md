@@ -16,11 +16,24 @@
 ```text
 packages/core    # 状态机、类型、存储、上下文/记忆算法
 packages/agents  # 规划/设定/大纲/写作/审校/记忆等智能体
-packages/cli     # 本地命令行入口
+packages/cli     # 本地命令行入口 + Mode Parity / Web Studio 共享契约
+apps/web/        # 零依赖 Web 工作台（单文件 HTML，约 62 KB）
+apps/tui/        # 静态 TUI 交互式面板（单文件 HTML）
 .flue/           # Flue-style agent/workflow 蓝图
 examples/        # 输入样例
-scripts/         # 验收脚本
+scripts/         # 验收脚本 + 跨平台打开器 (verify-readme / incremental-coverage / open)
+index.html       # 兼容旧 Pages 的根入口，跳转到 apps/web/
 ```
+
+## 三大入口（CLI / Web / TUI）
+
+同一份能力通过三个入口暴露，由 `packages/cli/src/mode-parity.ts` 中的 Mode Parity 契约统一，避免后续漂移。
+
+| 入口 | 位置 | 启动方式 | 角色 |
+| --- | --- | --- | --- |
+| CLI | `packages/cli/src/cli.ts` | `npm run cli -- <command> ...` · `npx novel-ma <command> ...` | 脚本化、CI 友好、JSON 输出 |
+| Web 工作台 | `apps/web/index.html` | `npm run web` *或* `npm run cli -- web` *或* `npm run cli -- --web` *或* `npx novel-ma web`（或浏览器直接打开 / GitHub Pages） | 可视化、交互、4 套主题 |
+| TUI 面板 | `apps/tui/index.html` | `npm run tui` *或* `npm run cli -- tui` *或* `npm run cli -- --tui` *或* `npx novel-ma tui`（或浏览器直接打开 / GitHub Pages） | 终端风格，镜像 Web 主流程 |
 
 ## 快速开始
 
@@ -33,6 +46,8 @@ npm run coverage:incremental
 npm run verify:readme
 npm run bootstrap
 ```
+
+`npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
 ## V35-V40 新增能力
 
@@ -162,6 +177,182 @@ npm run bootstrap
 - 续写上下文构建：融合最近章节摘要、角色状态、伏笔记忆和风格指纹。
 - 续写草稿约束：Writer Agent 在续写模式下显式使用 `续写目标 / 前文摘要 / 记忆约束 / 风格指纹`。
 - 验收门禁：新增 `coverage:incremental` 与 `verify:readme`，用于验证增量覆盖率和 README 命令可交付。
+
+## Web 工作台（`apps/web/`）
+
+零依赖、单文件 HTML（约 62 KB）的浏览器端工作台，不发起网络请求、不依赖 CDN、不需要后端服务。本地直接打开或通过 GitHub Pages 访问。
+
+### 打开方式
+
+```bash
+# 推荐：npm 脚本（跨平台，走 scripts/open.mjs）
+npm run web
+
+# 等价 CLI 快捷方式 — 同一份二进制有四种调用形式：
+npm run cli -- web           # 经 npm 脚本调用
+novel-ma web                  # 当 ./node_modules/.bin 在 PATH 中（npm workspaces 自动创建软链）
+npx novel-ma web              # 经 npx 调用 — 在仓库内任意目录都可用
+npm exec novel-ma web         # npm exec 的等价形式
+
+# 等价 CLI 快捷方式（flag 形式，同样四种调用形式）
+npm run cli -- --web
+novel-ma --web
+npx novel-ma --web
+npm exec novel-ma --web
+
+# `web` / `tui` 快捷方式支持透传给 scripts/open.mjs 的 opener flag：
+novel-ma web --print-url      # 只打印解析后的 file:// URL，不实际启动浏览器
+novel-ma web --no-launch      # --print-url 的别名
+```
+
+所有启动方式都走 `scripts/open.mjs`，它会按候选列表逐个尝试：
+
+| 平台 | 候选顺序 |
+| --- | --- |
+| macOS | `open <path>` |
+| Windows | `powershell Start-Process <path>` → `cmd /c start "" <path>` |
+| Linux (WSL) | `wslview <path>`（如已安装）→ `explorer.exe <win-path>` → `explorer.exe <wsl-path>` |
+| Linux（原生） | `sensible-browser` → `firefox` → `chromium` → `google-chrome` → `microsoft-edge` → `xdg-open` |
+
+当所有候选都返回非零退出码时，opener 打印解析后的 `file://` URL 并 `exit 1`，你可以把它粘贴到宿主机浏览器（headless WSL 上常见，`explorer.exe` 与 `xdg-open` 都找不到默认浏览器）。
+
+### 主题切换（Header）
+
+首页工具栏暴露 4 套主题，无需刷新即可切换：
+
+`light` · `dark` · `sepia` · `nord`
+
+### Web 面板（自上而下）
+
+1. **根据主题创建** — 输入主题，生成 artifact 草案。
+2. **根据已有篇章续写** — 粘贴章节，构建续写上下文。
+3. **伏笔回收评分** — 对伏笔清单输出 recovered/open/overdue/score。
+4. **Artifact 导入与对比** — 粘贴 JSON 与当前预览对比。
+5. **导入两个 Artifact 对比** — 双 artifact 可读 Diff。
+6. **导入项目库 Bundle** — 合并导出 bundle 到 localStorage 项目库。
+7. **Artifact 真实导入向导** — schema 校验 + 修复建议。
+8. **续写质量面板** — 角色 / 伏笔 / 文风子分数。
+9. **本地项目库清理面板** — dry-run prune manifest（默认不删除）。
+10. **Provider 实战面板** — mock / openai-compatible readiness 诊断。
+11. **Flue Workflow 适配** — premise → bible → outline → draft → critique → revise → memory 计划。
+12. **桌面壳准备度** — Electron / Desktop shell 检查。
+13. **长篇工程化控制台** — Longform Project OS 概览。
+14. **V30 panels** — Artifact Import Studio、Longform Project OS、Quality Repair Loop、Provider Live Runtime、Flue Workflow Runner、Desktop File Bridge、Collaboration Pack、Narrative Analytics、Publishing Pipeline、Agent Studio。
+15. **CLI/Web/TUI 功能对齐** — Mode Parity 矩阵（同时显示 `novel-ma mode-parity` / `novel-ma tui` 引用）。
+16. **V32 Web-first Studio Hub / V32 TUI Interactive Shell / V33 Web Product Ops / V34 Product Closure Hub / V35-V40 Execution Suite** — 总控 / 闭环面板。
+17. **TUI 模式预览** — 内嵌链接到 `apps/tui/`。
+18. **本地项目库 / 项目目录索引 / Artifact 预览输出** — 保存列表、latest/history 索引、JSON 预览与下载。
+
+### Web Header 工具栏
+
+- **主题切换** `<select>` — light / dark / sepia / nord。
+- **保存到本地项目库** — 把当前预览写入 localStorage。
+- **导出项目库** — 把项目库打包为可下载 JSON。
+
+### Web ↔ CLI 对照表
+
+每个 Web 面板都映射到 CLI 命令，Mode Parity 矩阵是这套映射的唯一真源：
+
+| Web 面板 | CLI 命令 |
+| --- | --- |
+| 根据主题创建 | `novel-ma new "<theme>" --chapters N --words N` |
+| 根据已有篇章续写 / Quality Repair Loop | `novel-ma continue <file> --words N`（加 `--quality-artifact <artifact>` 触发质量门禁） |
+| Provider 实战面板 / Provider Live Runtime | `novel-ma provider-doctor` · `novel-ma provider-smoke "<prompt>"` |
+| Artifact 真实导入向导 | `novel-ma artifact-inspect <artifact.json>` |
+| 项目目录索引 / 最近项目 | `novel-ma artifact-catalog .novel-ma/projects [--enrich]` · `novel-ma artifact-latest .novel-ma/projects` |
+| 本地项目库 / Narrative Analytics | `novel-ma artifact-search .novel-ma/projects <query> [--latest-only] [--mode theme\|continuation]` |
+| Artifact Import Studio | `novel-ma artifact-normalize <artifact.json>` |
+| Publishing Pipeline | `novel-ma artifact-export <artifact.json>` |
+| Longform Project OS / 章节版本树 | `novel-ma artifact-version-tree <artifact.json>` |
+| 本地项目库清理面板 | `novel-ma artifact-prune .novel-ma/projects --keep N [--apply]`（默认 dry-run） |
+| 导入两个 Artifact 对比 | `novel-ma artifact-diff <left> <right> --format text` |
+| 续写质量面板 / Quality Repair Loop | `novel-ma continuation-check <artifact.json> <text>` |
+
+## TUI 交互式面板（`apps/tui/`）
+
+浏览器渲染的静态终端面板，镜像 Web-first Studio Hub，适合截图分享、打印成 cheat sheet，或作为 14 个 CLI 命令的速查表。
+
+### 打开方式
+
+```bash
+# 推荐：npm 脚本（跨平台，走 scripts/open.mjs）
+npm run tui
+
+# 等价 CLI 快捷方式 — 同一份二进制有四种调用形式：
+npm run cli -- tui           # 经 npm 脚本调用
+novel-ma tui                  # 当 ./node_modules/.bin 在 PATH 中（npm workspaces 自动创建软链）
+npx novel-ma tui              # 经 npx 调用 — 在仓库内任意目录都可用
+npm exec novel-ma tui         # npm exec 的等价形式
+
+# 等价 CLI 快捷方式（flag 形式，同样四种调用形式）
+npm run cli -- --tui
+novel-ma --tui
+npx novel-ma --tui
+npm exec novel-ma --tui
+
+# `tui` / `web` 快捷方式支持透传给 scripts/open.mjs 的 opener flag：
+novel-ma tui --print-url      # 只打印解析后的 file:// URL，不实际启动浏览器
+novel-ma tui --no-launch      # --print-url 的别名
+```
+
+所有启动方式都走 `scripts/open.mjs`；平台候选矩阵与 headless WSL 回退行为见 Web 工作台章节。
+
+### TUI 面板区
+
+- **Interactive Shell · Web-first Studio Mirror** — 可选动作（Dashboard / Library / Continue / Provider / Analytics / Shell / Contract），按键提示 `↑/↓ 选择动作 · Enter 生成命令 · w 打开 Web 工作台 · q 退出`，并预渲染命令样例。
+- **Mode Parity · CLI/Web/TUI 功能对齐** — 14 命令 × 3 入口矩阵的 checklist。
+
+### TUI 命令速查（与 `apps/tui/` 中显示一致）
+
+```text
+novel-ma artifact-latest .novel-ma/projects
+novel-ma artifact-catalog .novel-ma/projects --enrich
+novel-ma continue <file> --quality-artifact <artifact>
+novel-ma provider-doctor && novel-ma provider-smoke <prompt>
+novel-ma artifact-search .novel-ma/projects <query>
+novel-ma tui                  # 打开 TUI Interactive Shell 面板（走 scripts/open.mjs）
+novel-ma --tui                # flag 形式别名，等价于 `novel-ma tui`
+novel-ma web                  # 打开 Web 工作台（走 scripts/open.mjs）
+novel-ma --web                # flag 形式别名，等价于 `novel-ma web`
+novel-ma mode-parity          # 打印 CLI/Web/TUI 对齐矩阵（Mode Parity 契约）
+```
+
+`novel-ma mode-parity` 由 `packages/cli/src/mode-parity.ts` 暴露，是 Mode Parity 契约的真正源。
+
+`web` / `tui` / `--web` / `--tui` 快捷方式支持 `--print-url` / `--no-launch` 透传给 `scripts/open.mjs`。在任何平台上当所有浏览器启动器都返回非零退出码时，opener 会打印解析后的 `file://` URL 并 `exit 1`，你可以把它粘贴到宿主机浏览器。
+
+## Mode Parity（CLI / Web / TUI 对齐矩阵）
+
+三入口共享同一份 14 命令能力集，矩阵由 `packages/cli/src/mode-parity.ts` 生成，是任何入口变更前的强制检查项。
+
+```text
+[x] new                    web:根据主题创建 / V30 Longform Project OS            tui:Create Novel
+[x] continue               web:根据已有篇章续写 / Quality Repair Loop            tui:Continue Novel
+[x] provider-smoke         web:Provider 实战面板 / Provider Live Runtime         tui:Provider Smoke
+[x] provider-doctor        web:Provider 实战面板                                 tui:Provider Doctor
+[x] artifact-inspect       web:Artifact 真实导入向导                            tui:Artifact Inspect
+[x] artifact-catalog       web:项目目录索引 / 最近项目                          tui:Artifact Catalog
+[x] artifact-latest        web:项目目录索引 / 最近项目                          tui:Artifact Latest
+[x] artifact-search        web:本地项目库 / Narrative Analytics                 tui:Artifact Search
+[x] artifact-normalize     web:Artifact Import Studio                           tui:Artifact Normalize
+[x] artifact-export        web:Publishing Pipeline                              tui:Artifact Export
+[x] artifact-version-tree  web:Longform Project OS / 章节版本树                  tui:Version Tree
+[x] artifact-prune         web:本地项目库清理面板                                tui:Artifact Prune
+[x] artifact-diff          web:导入两个 Artifact 对比                            tui:Artifact Diff
+[x] continuation-check     web:续写质量面板 / Quality Repair Loop               tui:Continuation Check
+```
+
+## GitHub Pages
+
+`.github/workflows/pages.yml` 会部署 `apps/web/` 工作台和 `apps/tui/` 面板。把 Pages 切到 **workflow 模式** 后，push 到 `main`/`master` 或手动运行 workflow 即可。
+
+- 在线工作台：`https://<owner>.github.io/novel-multi-agent/apps/web/`
+- TUI 镜像：`https://<owner>.github.io/novel-multi-agent/apps/tui/`
+- 旧根 `index.html` 自动跳转到 `apps/web/`。
+
+## CI
+
+`.github/workflows/ci.yml` 在每次 push / PR 到 `main` 时执行 `npm ci → check → test → build → coverage:incremental → verify:readme`。`verify:readme` 会按本 README 列出的命令逐条重放，文档漂移会在 CI 阶段暴露。
 
 ## CLI 用法
 
