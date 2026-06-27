@@ -74,6 +74,10 @@ import {
   planIdbMigration,
   buildTuiMirror,
   planIdbExecution,
+  parseReplCommand,
+  planReplDispatch,
+  buildReplHelp,
+  planCliCommand,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1193,5 +1197,59 @@ describe('web-first studio models', () => {
 
     const noExec = planIdbExecution(buildIdbExecutor({ operations: [] }), { timeoutMs: 1 });
     assert.ok(noExec.wrapper.length > 100);
+  });
+
+  it('parses V61 REPL command into name args flags and raw', () => {
+    const empty = parseReplCommand('');
+    assert.equal(empty.name, '');
+    assert.equal(empty.args.length, 0);
+    const cmd = parseReplCommand('artifact-search --query=月背 --limit=5 my/path');
+    assert.equal(cmd.name, 'artifact-search');
+    assert.equal(cmd.flags['query'], '月背');
+    assert.equal(cmd.flags['limit'], '5');
+    assert.deepEqual(cmd.args, ['my/path']);
+    const flag = parseReplCommand('new --quality');
+    assert.equal(flag.flags['quality'], 'true');
+    assert.equal(flag.flags['quality'] === 'true' ? 'with-quality' : 'no-quality', 'with-quality');
+  });
+
+  it('plans V61 REPL dispatch with matched handler suggestions and warning for unknown command', () => {
+    const known = planReplDispatch(parseReplCommand('help'));
+    assert.equal(known.matched, 'help');
+    assert.equal(known.handler, 'handle_help');
+    assert.equal(known.ready, true);
+
+    const unknown = planReplDispatch(parseReplCommand('zzz'));
+    assert.equal(unknown.matched, null);
+    assert.equal(unknown.ready, false);
+    assert.ok(unknown.warning?.includes('unknown command'));
+    assert.ok(unknown.suggestions.length <= 3);
+  });
+
+  it('builds V61 REPL help with 21 entries including new continue provider-smoke and quit', () => {
+    const help = buildReplHelp();
+    assert.equal(help.length, 21);
+    const names = help.map((e) => e.command);
+    assert.ok(names.includes('new'));
+    assert.ok(names.includes('continue'));
+    assert.ok(names.includes('provider-smoke'));
+    assert.ok(names.includes('quit'));
+    const filtered = buildReplHelp('art');
+    assert.ok(filtered.every((entry) => entry.command.includes('art')));
+  });
+
+  it('plans V61 CLI command with allowed list filter and unknown warning', () => {
+    const ok = planCliCommand('artifact-latest');
+    assert.equal(ok.matched, 'artifact-latest');
+    assert.equal(ok.ready, true);
+    assert.ok(ok.helpEntry);
+
+    const blocked = planCliCommand('quit', { allowedCommands: ['new', 'continue', 'help'] });
+    assert.equal(blocked.matched, 'quit');
+    assert.equal(blocked.ready, false);
+    assert.ok(blocked.warning?.includes('not in allowed list'));
+
+    const unknown = planCliCommand('unknown-cmd');
+    assert.equal(unknown.ready, false);
   });
 });

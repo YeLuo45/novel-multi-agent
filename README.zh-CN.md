@@ -49,6 +49,16 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V61 CLI REPL 调度器（21 命令 + 解析 + 派发 + allowlist + help）
+
+- `parseReplCommand(input)`：解析 `command --flag=value arg` 字符串为 `{name, args[], flags{}, raw}`。
+- `planReplDispatch(command)`：匹配 21 内置命令之一（new/continue/provider-smoke/provider-doctor/artifact-*/tui/mode-parity/workspace-persist/exec-pipeline/idb-migrate/undo-pop/redo-push/markdown-render/help/quit），返回 `{matched, handler: 'handle_<cmd>', suggestions[], ready, warning?}`。
+- `buildReplHelp(filter?)`：列出所有命令 + description + flags[]，支持子串过滤。
+- `planCliCommand(input, options)`：包装 dispatch + allowlist 检查，返回 `ReplDispatchPlan & {helpEntry?}`。
+- HTML 集成：3 个 inline 按钮（parse/dispatch/help）+ 1 个输入框，实时展示解析结果/派发计划/全部命令列表。
+- 修 `parseReplCommand` 空 next token 处理 bug：`new --quality` 时 next=undefined，应赋 `flags['quality']='true'` 而不是 `''`。
+- 修 `planCliCommand` 的 `helpEntry` 类型不匹配：`matched` 是 `REPL_COMMANDS[].name`，需要显式构造 `{command, description, flags}` 才能匹配 `ReplHelpEntry`。
+
 ## V60 IDB Execution Wrapper（try-catch + onError + localStorage 错误回退）
 
 - `planIdbExecution(executor, {fallbackStorageKey, timeoutMs})`：从 V58 executor 生成 async wrapper 字符串，每步 `try { step.code; stepsCompleted = i; } catch (err) { onIdbError(i, err); return IdbExecutionResult; }` + 顶层 fallback try/catch + 3 个 errorHandlers（onIdbError 函数 / IDB not supported 检测 / timeout warning）。

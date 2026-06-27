@@ -427,6 +427,105 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface ReplCommand {
+  name: string;
+  args: string[];
+  flags: Record<string, string>;
+  raw: string;
+}
+
+export interface ReplDispatchPlan {
+  command: ReplCommand;
+  matched: string | null;
+  handler: string | null;
+  suggestions: string[];
+  ready: boolean;
+  warning?: string;
+}
+
+export interface ReplHelpEntry {
+  command: string;
+  description: string;
+  flags: string[];
+}
+
+const REPL_COMMANDS = [
+  { name: 'new', description: '从主题创建新章节', flags: ['--quality', '--enrich'] },
+  { name: 'continue', description: '续写已有章节', flags: ['--quality-artifact', '--writer'] },
+  { name: 'provider-smoke', description: 'Provider 实战 smoke 测试', flags: ['--prompt', '--model'] },
+  { name: 'provider-doctor', description: 'Provider 诊断', flags: ['--provider'] },
+  { name: 'artifact-latest', description: '查找最近 artifact', flags: ['--path', '--enrich'] },
+  { name: 'artifact-catalog', description: '列出所有 artifact', flags: ['--path', '--enrich'] },
+  { name: 'artifact-search', description: '全文搜索', flags: ['--query', '--limit'] },
+  { name: 'artifact-diff', description: '比较两个 artifact', flags: ['--left', '--right'] },
+  { name: 'artifact-prune', description: '清理老旧 artifact', flags: ['--older-than', '--keep-min'] },
+  { name: 'artifact-export', description: '导出 artifact 束', flags: ['--output', '--format'] },
+  { name: 'artifact-import', description: '导入 artifact 束', flags: ['--file', '--mode'] },
+  { name: 'tui', description: '启动 TUI 镜像', flags: ['--width'] },
+  { name: 'mode-parity', description: '显示 CLI/Web/TUI parity', flags: [] },
+  { name: 'workspace-persist', description: '持久化 workspace', flags: ['--storage', '--key'] },
+  { name: 'exec-pipeline', description: '运行多 agent pipeline', flags: ['--steps', '--concurrency'] },
+  { name: 'idb-migrate', description: '从 localStorage 迁移到 IndexedDB', flags: ['--db-name', '--dry-run'] },
+  { name: 'undo-pop', description: '从 undo 栈 pop', flags: ['--stack-key'] },
+  { name: 'redo-push', description: 'push redo 栈', flags: ['--stack-key', '--entry-id'] },
+  { name: 'markdown-render', description: '渲染 markdown 文本', flags: ['--max-heading'] },
+  { name: 'help', description: '显示所有命令', flags: [] },
+  { name: 'quit', description: '退出 REPL', flags: [] },
+];
+
+export function parseReplCommand(input: string): ReplCommand {
+  const raw = String(input ?? '').trim();
+  if (!raw) return { name: '', args: [], flags: {}, raw };
+  const tokens = raw.split(/\s+/);
+  const name = tokens[0] ?? '';
+  const args: string[] = [];
+  const flags: Record<string, string> = {};
+  for (let i = 1; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (!token) continue;
+    if (token.startsWith('--')) {
+      const eq = token.indexOf('=');
+      if (eq > 0) flags[token.slice(2, eq)] = token.slice(eq + 1);
+      else {
+        const next = tokens[i + 1];
+        if (next && !next.startsWith('--')) {
+          flags[token.slice(2)] = next;
+          i += 1;
+        } else {
+          flags[token.slice(2)] = 'true';
+        }
+      }
+    } else {
+      args.push(token);
+    }
+  }
+  return { name, args, flags, raw };
+}
+
+export function planReplDispatch(command: ReplCommand): ReplDispatchPlan {
+  const matched = REPL_COMMANDS.find((cmd) => cmd.name === command.name);
+  if (!matched) {
+    const suggestions = REPL_COMMANDS.filter((cmd) => cmd.name.startsWith(command.name.slice(0, 2))).slice(0, 3).map((cmd) => cmd.name);
+    return { command, matched: null, handler: null, suggestions, ready: false, warning: `unknown command '${command.name}'` };
+  }
+  return { command, matched: matched.name, handler: `handle_${matched.name}`, suggestions: [], ready: true };
+}
+
+export function buildReplHelp(filter?: string): ReplHelpEntry[] {
+  return REPL_COMMANDS.filter((cmd) => !filter || cmd.name.includes(filter.toLowerCase())).map((cmd) => ({ command: cmd.name, description: cmd.description, flags: cmd.flags }));
+}
+
+export function planCliCommand(input: string, options: { allowedCommands?: string[] } = {}): ReplDispatchPlan & { helpEntry?: ReplHelpEntry } {
+  const parsed = parseReplCommand(input);
+  const allowed = options.allowedCommands ?? REPL_COMMANDS.map((cmd) => cmd.name);
+  const plan = planReplDispatch(parsed);
+  if (plan.matched && !allowed.includes(plan.matched)) {
+    return { ...plan, ready: false, warning: `command '${plan.matched}' not in allowed list` };
+  }
+  const matched = plan.matched ? REPL_COMMANDS.find((cmd) => cmd.name === plan.matched) : undefined;
+  const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
+  return { ...plan, helpEntry };
+}
 export interface IdbExecutionPlan {
   wrapper: string;
   totalSteps: number;
