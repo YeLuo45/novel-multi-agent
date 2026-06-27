@@ -73,6 +73,7 @@ import {
   buildIdbExecutor,
   planIdbMigration,
   buildTuiMirror,
+  planIdbExecution,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1166,5 +1167,31 @@ describe('web-first studio models', () => {
     const v58 = mirror.sections.find((s) => s.id === 'V58');
     assert.ok(v58);
     assert.ok(v58?.lines.some((line) => line.includes('buildIdbExecutor')));
+  });
+
+  it('plans V60 IDB execution wrapper with try-catch error handlers timeout and fallback flag', () => {
+    const executor = buildIdbExecutor({
+      operations: [
+        { kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' },
+        { kind: 'count', store: 'projects', expect: 'count' },
+      ],
+      supportsIdb: true,
+      fallbackStorageKey: 'novel-ma:artifacts',
+    });
+    const plan = planIdbExecution(executor, { fallbackStorageKey: 'novel-ma:artifacts', timeoutMs: 5000 });
+    assert.ok(plan.wrapper.includes('async function runIdbExecutor'));
+    assert.ok(plan.wrapper.includes('onIdbError'));
+    assert.ok(plan.wrapper.includes('return { success: true'));
+    assert.ok(plan.wrapper.includes('localStorage.setItem'));
+    assert.equal(plan.totalSteps, executor.totalSteps);
+    assert.ok(plan.estimatedDurationMs >= 200);
+    assert.equal(plan.errorHandlers.length, 3);
+    assert.ok(plan.errorHandlers[0]?.includes('console.error'));
+    assert.ok(plan.errorHandlers[1]?.includes('IndexedDB not supported'));
+    assert.equal(plan.fallbackEnabled, true);
+    assert.equal(plan.ready, true);
+
+    const noExec = planIdbExecution(buildIdbExecutor({ operations: [] }), { timeoutMs: 1 });
+    assert.ok(noExec.wrapper.length > 100);
   });
 });

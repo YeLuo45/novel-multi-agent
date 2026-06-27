@@ -427,6 +427,55 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface IdbExecutionPlan {
+  wrapper: string;
+  totalSteps: number;
+  estimatedDurationMs: number;
+  errorHandlers: string[];
+  fallbackEnabled: boolean;
+  ready: boolean;
+}
+
+export interface IdbExecutionResult {
+  success: boolean;
+  stepsCompleted: number;
+  totalSteps: number;
+  errorMessage: string | null;
+  errorStep: number | null;
+  fallbackUsed: boolean;
+  durationMs: number;
+}
+
+export function planIdbExecution(executor: IdbExecutor, options: { fallbackStorageKey?: string; timeoutMs?: number } = {}): IdbExecutionPlan {
+  const fallback = options.fallbackStorageKey ?? executor.fallbackAvailable ? 'novel-ma:artifacts' : '';
+  const timeout = Math.max(1000, Math.min(60_000, options.timeoutMs ?? 10_000));
+  const errorHandlers = [
+    `function onIdbError(step, err) { console.error('[IDB] step ' + step + ' failed:', err); if (fallbackStorageKey && typeof localStorage !== 'undefined') { localStorage.setItem('novel-ma:idb-error', JSON.stringify({ step, message: String(err), at: Date.now() })); } }`,
+    `if (typeof indexedDB === 'undefined') { onIdbError(0, 'IndexedDB not supported in this environment'); return { success: false, stepsCompleted: 0, totalSteps, errorMessage: 'IDB not supported', errorStep: 0, fallbackUsed: fallbackStorageKey ? true : false, durationMs: 0 }; }`,
+    `const startTime = Date.now(); if (startTime + timeout < Infinity) setTimeout(() => console.warn('[IDB] timeout ' + timeout + 'ms'), timeout);`,
+  ];
+  const totalSteps = executor.totalSteps;
+  const estimatedDurationMs = executor.estimatedDurationMs + 200;
+  const wrapper = `async function runIdbExecutor(executor) {
+  const { steps, fallbackStorageKey, timeout } = executor;
+  let stepsCompleted = 0;
+  try {
+    ${errorHandlers.map((h) => `    ${h}`).join('\n')}
+    ${executor.steps.map((step) => `    try { ${step.code}; stepsCompleted = ${step.index}; } catch (err) { onIdbError(${step.index}, err); return { success: false, stepsCompleted, totalSteps: ${totalSteps}, errorMessage: String(err), errorStep: ${step.index}, fallbackUsed: true, durationMs: Date.now() - startTime }; }`).join('\n')}
+    return { success: true, stepsCompleted: ${totalSteps}, totalSteps: ${totalSteps}, errorMessage: null, errorStep: null, fallbackUsed: false, durationMs: Date.now() - startTime };
+  } catch (err) {
+    return { success: false, stepsCompleted, totalSteps: ${totalSteps}, errorMessage: String(err), errorStep: stepsCompleted, fallbackUsed: true, durationMs: Date.now() - startTime };
+  }
+}`;
+  return {
+    wrapper,
+    totalSteps,
+    estimatedDurationMs,
+    errorHandlers,
+    fallbackEnabled: executor.fallbackAvailable,
+    ready: executor.ready,
+  };
+}
 export interface TuiMirrorSection {
   id: string;
   title: string;

@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V60 IDB Execution Wrapper（try-catch + onError + localStorage 错误回退）
+
+- `planIdbExecution(executor, {fallbackStorageKey, timeoutMs})`：从 V58 executor 生成 async wrapper 字符串，每步 `try { step.code; stepsCompleted = i; } catch (err) { onIdbError(i, err); return IdbExecutionResult; }` + 顶层 fallback try/catch + 3 个 errorHandlers（onIdbError 函数 / IDB not supported 检测 / timeout warning）。
+- `IdbExecutionResult` 包含 success/stepsCompleted/totalSteps/errorMessage/errorStep/fallbackUsed/durationMs。
+- HTML 集成：1 个 inline 按钮（生成 Execution Wrapper），输出 wrapper 代码字符串到 `idb-exec-wrapper-host`，HTML 端可 `eval(plan.wrapper)` 真实运行 IDB 步骤。
+- 修复 wrapper 缺失 `localStorage.setItem` 引用（之前只放在 errorHandlers 数组里，没 inline 到 wrapper）。
+- 修 V60 测试 line 1185 `assert.ok(plan.wrapper.includes('localStorage.setItem'))` 失败：把 errorHandlers 内联到 wrapper 字符串内。
+
 ## V59 TUI 镜像 V41-V58 全功能（三端 parity 100%）
 
 - `buildTuiMirror({width, webStudioVersion})`：聚合 18 个 V 特性（V41-V58）到 21 个 TUI 段（1 header + 18 features + 1 bindings + 1 shortcuts），每段生成 ASCII 边框文本（┌─┐│└─┘），含 parity=1.0 + bindings(11) + shortCuts(9) + featuresCovered(18) 元数据。
