@@ -284,6 +284,129 @@ export interface CharacterArcSvg {
   height: number;
 }
 
+export interface DailyGoal {
+  target: number;
+  history: Array<{ date: string; words: number }>;
+  streakDays: number;
+  todayWords: number;
+  todayProgress: number;
+  tone: 'pass' | 'warn' | 'fail';
+}
+
+export interface HeatmapCell {
+  date: string;
+  words: number;
+  intensity: number;
+}
+
+export interface HeatmapSvg {
+  svg: string;
+  cells: HeatmapCell[];
+  weeks: number;
+  cellSize: number;
+}
+
+export interface FocusSession {
+  durationMin: number;
+  startedAt: string;
+  endsAt: string;
+  breaks: number;
+  target: number;
+}
+
+export interface UndoEntry {
+  id: string;
+  createdAt: string;
+  before: unknown;
+  after: unknown;
+  label: string;
+}
+
+export function computeDailyGoal(history: Array<{ date: string; words: number }>, target: number): DailyGoal {
+  const safeTarget = Math.max(1, Math.round(target));
+  const sorted = [...history].sort((left, right) => String(left.date).localeCompare(String(right.date)));
+  const today = new Date().toISOString().slice(0, 10);
+  const todayWords = sorted.filter((entry) => entry.date === today).reduce((sum, entry) => sum + Math.max(0, Number(entry.words) || 0), 0);
+  const dates = [...new Set(sorted.map((entry) => entry.date))].sort();
+  let streak = 0;
+  const cursor = new Date(today);
+  const dayMap = new Map<string, number>();
+  for (const entry of sorted) {
+    dayMap.set(entry.date, (dayMap.get(entry.date) ?? 0) + Math.max(0, Number(entry.words) || 0));
+  }
+  for (let step = 0; step < 365; step += 1) {
+    const key = cursor.toISOString().slice(0, 10);
+    const dayWords = dayMap.get(key) ?? 0;
+    if (dayWords >= safeTarget) {
+      streak += 1;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      continue;
+    }
+    if (key === today) {
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      continue;
+    }
+    break;
+  }
+  const todayProgress = Math.min(100, Math.round((todayWords / safeTarget) * 100));
+  const tone = todayProgress >= 100 ? 'pass' : todayProgress >= 50 ? 'warn' : 'fail';
+  return { target: safeTarget, history: sorted, streakDays: streak, todayWords, todayProgress, tone };
+}
+
+export function buildHeatmapSvg(history: Array<{ date: string; words: number }>, weeks: number, options: { target?: number } = {}): HeatmapSvg {
+  const safeWeeks = Math.max(1, Math.min(26, weeks));
+  const target = Math.max(1, options.target ?? 500);
+  const cellSize = 14;
+  const gap = 3;
+  const width = safeWeeks * (cellSize + gap);
+  const height = 7 * (cellSize + gap);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - safeWeeks * 7 + 1);
+  const map = new Map<string, number>();
+  for (const entry of history) {
+    map.set(entry.date, (map.get(entry.date) ?? 0) + Math.max(0, Number(entry.words) || 0));
+  }
+  const cells: HeatmapCell[] = [];
+  const cellMarkup: string[] = [];
+  let cursor = new Date(start);
+  for (let week = 0; week < safeWeeks; week += 1) {
+    for (let day = 0; day < 7; day += 1) {
+      const key = cursor.toISOString().slice(0, 10);
+      const words = map.get(key) ?? 0;
+      const intensity = Math.min(1, words / target);
+      cells.push({ date: key, words, intensity });
+      const x = week * (cellSize + gap);
+      const y = day * (cellSize + gap);
+      const fill = intensity === 0 ? '#e5e7eb' : `rgba(22, 163, 74, ${0.2 + intensity * 0.8})`;
+      cellMarkup.push(`<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="3" fill="${fill}"><title>${svgEscape(key)} · ${words}</title></rect>`);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="写作热力图">${cellMarkup.join('')}</svg>`;
+  return { svg, cells, weeks: safeWeeks, cellSize };
+}
+
+export function planFocusSession(durationMin: number, options: { target?: number; breaks?: number } = {}): FocusSession {
+  const minutes = Math.max(5, Math.min(180, Math.round(durationMin)));
+  const breaks = Math.max(0, Math.min(6, options.breaks ?? Math.floor(minutes / 25)));
+  const target = Math.max(50, Math.round(options.target ?? minutes * 30));
+  const startedAt = new Date().toISOString();
+  const endsAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+  return { durationMin: minutes, startedAt, endsAt, breaks, target };
+}
+
+export function planUndoEntry(before: unknown, after: unknown, label: string, options: { id?: string; createdAt?: string } = {}): UndoEntry {
+  return {
+    id: options.id ?? `undo-${Date.now()}`,
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    before,
+    after,
+    label,
+  };
+}
+
 export interface DiffLine {
   kind: 'equal' | 'add' | 'remove';
   leftLine: string | null;

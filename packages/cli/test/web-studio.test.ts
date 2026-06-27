@@ -35,6 +35,10 @@ import {
   planIndexedDbMigration,
   buildDiffView,
   buildImportWizard,
+  computeDailyGoal,
+  buildHeatmapSvg,
+  planFocusSession,
+  planUndoEntry,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -578,5 +582,46 @@ describe('web-first studio models', () => {
     assert.equal(legacy.ok, true);
     assert.ok(legacy.warnings.some((line) => line.includes('schemaVersion=1')));
     assert.equal(legacy.steps[2]?.ok, true);
+  });
+
+  it('computes V47 daily goal with today progress streak days and tone coloring', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const goal = computeDailyGoal([
+      { date: yesterday, words: 900 },
+      { date: today, words: 450 },
+    ], 900);
+    assert.equal(goal.target, 900);
+    assert.equal(goal.todayWords, 450);
+    assert.equal(goal.todayProgress, 50);
+    assert.equal(goal.tone, 'warn');
+    assert.ok(goal.streakDays >= 1);
+  });
+
+  it('builds V47 heatmap SVG with weeks x 7 cells intensity fill and title tooltips', () => {
+    const heatmap = buildHeatmapSvg([{ date: new Date().toISOString().slice(0, 10), words: 600 }], 4, { target: 600 });
+    assert.equal(heatmap.weeks, 4);
+    assert.equal(heatmap.cells.length, 28);
+    assert.ok(heatmap.svg.startsWith('<svg'));
+    assert.ok(heatmap.svg.includes('rgba(22, 163, 74'));
+    assert.ok(heatmap.cells.some((cell) => cell.words > 0));
+    assert.ok(heatmap.cells.some((cell) => cell.intensity >= 0.5));
+  });
+
+  it('plans V47 focus session with duration breaks target start end ISO timestamps', () => {
+    const session = planFocusSession(50, { target: 1500 });
+    assert.equal(session.durationMin, 50);
+    assert.ok(session.endsAt > session.startedAt);
+    assert.ok(session.target >= 50);
+    assert.equal(session.breaks, 2);
+  });
+
+  it('plans V47 undo entry with id label timestamps and before-after snapshots', () => {
+    const entry = planUndoEntry({ text: 'old' }, { text: 'new' }, 'edit chapter title', { id: 'undo-test-1', createdAt: '2026-06-27T00:00:00.000Z' });
+    assert.equal(entry.id, 'undo-test-1');
+    assert.equal(entry.createdAt, '2026-06-27T00:00:00.000Z');
+    assert.equal(entry.label, 'edit chapter title');
+    assert.deepEqual(entry.before, { text: 'old' });
+    assert.deepEqual(entry.after, { text: 'new' });
   });
 });

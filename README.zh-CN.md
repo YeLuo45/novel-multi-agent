@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V47 Web 写作辅助（每日目标 + 写作热力图 + 番茄钟 + 撤销栈）
+
+- `computeDailyGoal(history, target)`：聚合今日字数、连击天数（streakDays）、今日进度和 tone 着色（pass/warn/fail）；支持跨日连击，跳过今天未达标从昨天起算。
+- `buildHeatmapSvg(history, weeks, options)`：仿 GitHub contribution graph，weeks × 7 单元 = N 个格子，每格强度按 `words/target` 归一化，绿色 rgba 透明度，灰色空格子，自带 `<title>` tooltip。
+- `planFocusSession(durationMin, options)`：番茄钟规划，clamp 5~180 分钟，按 25 分钟/休息自动算 breaks，默认目标 `durationMin × 30` 字。
+- `planUndoEntry(before, after, label, options)`：撤销栈条目结构（id/createdAt/before/after/label），HTML 端可序列化到 localStorage。
+- HTML 集成：4 个 inline 控件（每日目标/热力图/番茄钟/撤销），复用 `.svg-frame` + `.diff-summary` badge 风格。
+- 修复 `computeDailyGoal` 旧 bug：原 while 循环逻辑只在 dayWords 恰好为 0 时跳到昨天，导致今天未达标直接 break，streakDays 永远 0；改为 for 循环 365 步 + 双分支条件。
+
 ## V46 Web Diff 可视化 + 导入向导交互
 
 - `buildDiffView(left, right)`：自实现 LCS（最长公共子序列）算法做行级 diff，返回 `lines`（equal/add/remove 三态）+ `added/removed/unchanged` 计数 + `similarity` 比例（0~1）。零依赖实现，~50 行。
