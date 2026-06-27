@@ -39,6 +39,10 @@ import {
   buildHeatmapSvg,
   planFocusSession,
   planUndoEntry,
+  buildPwaManifest,
+  buildServiceWorkerPlan,
+  renderServiceWorkerScript,
+  assessOfflineCapability,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -623,5 +627,54 @@ describe('web-first studio models', () => {
     assert.equal(entry.label, 'edit chapter title');
     assert.deepEqual(entry.before, { text: 'old' });
     assert.deepEqual(entry.after, { text: 'new' });
+  });
+
+  it('builds V48 PWA manifest with name shortName display themeColor icons and standalone mode', () => {
+    const manifest = buildPwaManifest();
+    assert.equal(manifest.name, 'novel-multi-agent 工作台');
+    assert.equal(manifest.shortName, 'novel-ma');
+    assert.equal(manifest.display, 'standalone');
+    assert.equal(manifest.icons.length >= 1, true);
+    assert.ok(manifest.icons.every((icon) => icon.sizes && icon.type));
+  });
+
+  it('builds V48 service worker plan with cache name strategy precache and runtime patterns', () => {
+    const plan = buildServiceWorkerPlan();
+    assert.equal(plan.scriptName, 'sw.js');
+    assert.ok(plan.cacheName.startsWith('novel-ma-'));
+    assert.ok(['cache-first', 'network-first', 'stale-while-revalidate'].includes(plan.strategy));
+    assert.ok(plan.precacheFiles.length >= 1);
+    assert.ok(plan.runtimePatterns.length >= 1);
+    assert.equal(plan.ready, true);
+  });
+
+  it('renders V48 service worker script with install activate fetch listeners and cache fallback', () => {
+    const plan = buildServiceWorkerPlan();
+    const script = renderServiceWorkerScript(plan);
+    assert.ok(script.includes('self.addEventListener("install"'));
+    assert.ok(script.includes('self.addEventListener("activate"'));
+    assert.ok(script.includes('self.addEventListener("fetch"'));
+    assert.ok(script.includes(plan.cacheName));
+    assert.ok(script.includes(plan.fallback));
+    assert.ok(script.includes('caches.match'));
+  });
+
+  it('assesses V48 offline capability with manifest sw plan precache count and storage warnings', () => {
+    const manifest = buildPwaManifest();
+    const plan = buildServiceWorkerPlan();
+    const report = assessOfflineCapability({ manifest, plan, storageQuotaMb: 50 });
+    assert.equal(report.hasManifest, true);
+    assert.equal(report.hasServiceWorker, true);
+    assert.ok(report.precacheCount >= 1);
+    assert.ok(report.runtimePatterns >= 1);
+    assert.equal(report.storageQuotaMb, 50);
+    assert.equal(report.warnings.length, 0);
+
+    const tiny = assessOfflineCapability({ manifest, plan, storageQuotaMb: 10 });
+    assert.ok(tiny.warnings.some((line) => line.includes('storage quota below 20 MB')));
+
+    const missing = assessOfflineCapability({ manifest: null, plan: null });
+    assert.ok(missing.warnings.some((line) => line.includes('manifest missing')));
+    assert.equal(missing.hasManifest, false);
   });
 });

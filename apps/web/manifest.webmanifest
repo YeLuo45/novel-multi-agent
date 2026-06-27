@@ -1,0 +1,22 @@
+{
+  "name": "novel-multi-agent 工作台",
+  "shortName": "novel-ma",
+  "startUrl": "./",
+  "display": "standalone",
+  "themeColor": "#334155",
+  "backgroundColor": "#f8fafc",
+  "icons": [
+    {
+      "src": "apps/web/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "apps/web/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

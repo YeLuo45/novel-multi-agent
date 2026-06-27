@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V48 Web PWA（manifest + sw.js + 离线能力评估）
+
+- `buildPwaManifest()`：生成标准 W3C manifest（含 name/shortName/startUrl/display/themeColor/backgroundColor/icons[]），默认 192/512 双尺寸。
+- `buildServiceWorkerPlan()`：cache name、strategy（cache-first/network-first/stale-while-revalidate）、precacheFiles、runtimePatterns、fallback；默认 cacheName `novel-ma-v1`。
+- `renderServiceWorkerScript(plan)`：字符串模板生成 sw.js（install/activate/fetch 三个 listener + caches API + 离线 fallback），零依赖、~1.2KB。
+- `assessOfflineCapability({manifest, plan, storageQuotaMb})`：检查 manifest/sw/precache/runtime/存储配额 + 4 类 warning（missing/precache 超 30/quota 不足 20MB）。
+- 真实落地：`apps/web/manifest.webmanifest` + `apps/web/sw.js` 已生成；HTML 端 `<link rel="manifest">` + `navigator.serviceWorker.register('sw.js')`（vm sandbox 用 typeof guard 兼容）。
+- HTML 集成：3 个 inline 按钮（生成 manifest / 生成 sw.js / 离线评估），显示 manifest JSON、sw.js 代码、capability 报告。
+
 ## V47 Web 写作辅助（每日目标 + 写作热力图 + 番茄钟 + 撤销栈）
 
 - `computeDailyGoal(history, target)`：聚合今日字数、连击天数（streakDays）、今日进度和 tone 着色（pass/warn/fail）；支持跨日连击，跳过今天未达标从昨天起算。
