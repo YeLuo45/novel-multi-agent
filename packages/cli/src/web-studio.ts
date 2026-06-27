@@ -427,6 +427,159 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface MarkdownRenderOptions {
+  allowHtml?: boolean;
+  maxHeadingLevel?: number;
+  breaks?: boolean;
+}
+
+export interface MarkdownSection {
+  level: number;
+  title: string;
+  index: number;
+}
+
+export interface MarkdownRenderResult {
+  html: string;
+  sections: MarkdownSection[];
+  headings: number;
+  paragraphs: number;
+  codeBlocks: number;
+  links: number;
+}
+
+function escapeMdHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderInline(line: string, allowHtml: boolean): string {
+  let result = escapeMdHtml(line);
+  if (!allowHtml) {
+    result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+    result = result.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+  } else {
+    result = line;
+  }
+  return result;
+}
+
+export function renderMarkdown(text: string, options: MarkdownRenderOptions = {}): MarkdownRenderResult {
+  const maxLevel = Math.max(1, Math.min(6, options.maxHeadingLevel ?? 6));
+  const allowHtml = options.allowHtml ?? false;
+  const breaks = options.breaks ?? true;
+  const lines = String(text ?? '').split('\n');
+  const sections: MarkdownSection[] = [];
+  let headings = 0;
+  let paragraphs = 0;
+  let codeBlocks = 0;
+  let links = 0;
+  const htmlParts: string[] = [];
+  let inCode = false;
+  let codeBuffer: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let listBuffer: string[] = [];
+
+  function flushParagraph() {
+    if (paragraphBuffer.length === 0) return;
+    const joined = paragraphBuffer.join(breaks ? '<br>' : ' ');
+    htmlParts.push(`<p>${renderInline(joined, allowHtml)}</p>`);
+    paragraphBuffer = [];
+    paragraphs += 1;
+  }
+
+  function flushList() {
+    if (listBuffer.length === 0) return;
+    htmlParts.push('<ul>');
+    for (const item of listBuffer) htmlParts.push(`<li>${renderInline(item, allowHtml)}</li>`);
+    htmlParts.push('</ul>');
+    listBuffer = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, '');
+    if (line.startsWith('```')) {
+      flushParagraph();
+      flushList();
+      if (inCode) {
+        htmlParts.push(`<pre><code>${escapeMdHtml(codeBuffer.join('\n'))}</code></pre>`);
+        codeBuffer = [];
+        inCode = false;
+        codeBlocks += 1;
+      } else {
+        inCode = true;
+        codeBuffer = [];
+      }
+      continue;
+    }
+    if (inCode) {
+      codeBuffer.push(line);
+      continue;
+    }
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch && headingMatch[1] && headingMatch[2] !== undefined) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(maxLevel, headingMatch[1].length);
+      const title = headingMatch[2].trim();
+      sections.push({ level, title, index: sections.length });
+      htmlParts.push(`<h${level}>${renderInline(title, allowHtml)}</h${level}>`);
+      headings += 1;
+      continue;
+    }
+    const listMatch = line.match(/^[-*+]\s+(.+)$/);
+    if (listMatch && listMatch[1] !== undefined) {
+      flushParagraph();
+      listBuffer.push(listMatch[1]);
+      continue;
+    }
+    if (line.trim() === '') {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    flushList();
+    paragraphBuffer.push(line);
+  }
+  flushParagraph();
+  flushList();
+  if (inCode && codeBuffer.length) {
+    htmlParts.push(`<pre><code>${escapeMdHtml(codeBuffer.join('\n'))}</code></pre>`);
+    codeBlocks += 1;
+  }
+  const html = htmlParts.join('\n');
+  const linkCount = (html.match(/<a\s/g) ?? []).length;
+  return { html, sections, headings, paragraphs, codeBlocks, links: linkCount };
+}
+
+export function extractMarkdownOutline(text: string, maxDepth: number = 3): MarkdownSection[] {
+  const result = renderMarkdown(text, { allowHtml: false });
+  return result.sections.filter((section) => section.level <= Math.max(1, Math.min(6, maxDepth)));
+}
+
+export interface RichTextToolbarAction {
+  id: string;
+  label: string;
+  shortcut: string;
+  before: string;
+  after: string;
+  placeholder: string;
+}
+
+export function buildRichTextToolbar(): RichTextToolbarAction[] {
+  return [
+    { id: 'bold', label: '粗体', shortcut: 'Ctrl+B', before: '**', after: '**', placeholder: 'bold text' },
+    { id: 'italic', label: '斜体', shortcut: 'Ctrl+I', before: '*', after: '*', placeholder: 'italic text' },
+    { id: 'code', label: '代码', shortcut: 'Ctrl+E', before: '`', after: '`', placeholder: 'code' },
+    { id: 'h1', label: '一级标题', shortcut: 'Ctrl+1', before: '# ', after: '', placeholder: '标题' },
+    { id: 'h2', label: '二级标题', shortcut: 'Ctrl+2', before: '## ', after: '', placeholder: '标题' },
+    { id: 'list', label: '列表', shortcut: 'Ctrl+L', before: '- ', after: '', placeholder: 'item' },
+    { id: 'link', label: '链接', shortcut: 'Ctrl+K', before: '[', after: '](https://)', placeholder: 'link text' },
+    { id: 'codeblock', label: '代码块', shortcut: 'Ctrl+Shift+E', before: '```\n', after: '\n```', placeholder: 'code' },
+  ];
+}
+
 export interface IndexedDbSchemaStore {
   name: string;
   keyPath: string;

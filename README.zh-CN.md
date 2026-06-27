@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V52 Web Markdown 富文本编辑器（零依赖渲染 + 工具栏 + 大纲）
+
+- `renderMarkdown(text, options)`：~80 行自实现 markdown 渲染器，支持 # 标题 / **粗体** / *斜体* / `inline code` / `- list` / ``` codeblock ``` / `[text](url)` 链接；支持 `maxHeadingLevel` clamp + `breaks` + `allowHtml` 选项；返回 html + sections[] + counts（headings/paragraphs/codeBlocks/links）。
+- `extractMarkdownOutline(text, maxDepth=3)`：从 sections 过滤 level<=maxDepth，保留 index 稳定。
+- `buildRichTextToolbar()`：8 个 toolbar action（bold/italic/code/h1/h2/list/link/codeblock），每个含 id/label/shortcut/before/after/placeholder。
+- HTML 集成：textarea + 工具栏 8 按钮（点击在选区前后插入 wrap）+ 渲染按钮（输出 `.md-frame` 预览 + 统计 badge）+ 大纲按钮（输出 hierarchical 列表）。
+- vm sandbox 兼容：3 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V51 Web IndexedDB 真实迁移（schema + adapter + migration script）
 
 - `buildIndexedDbSchema()`：3 表（projects/tags/undo）+ 5 索引（updatedAt/mode/stage + projectIds multiEntry + createdAt）；dbName `novel-ma` v1。

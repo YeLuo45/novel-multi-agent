@@ -50,6 +50,9 @@ import {
   buildIndexedDbSchema,
   buildIndexedDbAdapter,
   buildMigrationScript,
+  renderMarkdown,
+  extractMarkdownOutline,
+  buildRichTextToolbar,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -798,5 +801,49 @@ describe('web-first studio models', () => {
     assert.ok(script.steps.length >= 4);
     assert.ok(script.steps.some((step) => step.includes('读取 localStorage')));
     assert.ok(script.steps.some((step) => step.includes('schemaVersion=2')));
+  });
+
+  it('renders V52 markdown to html with headings paragraphs lists code blocks and inline emphasis', () => {
+    const md = '# 标题一\n这是 **粗体** 和 *斜体*。\n\n- 项目 1\n- 项目 2\n\n```\nconsole.log("hi")\n```\n\n[link](https://example.com)';
+    const result = renderMarkdown(md);
+    assert.ok(result.html.includes('<h1>标题一</h1>'));
+    assert.ok(result.html.includes('<strong>粗体</strong>'));
+    assert.ok(result.html.includes('<em>斜体</em>'));
+    assert.ok(result.html.includes('<ul>'));
+    assert.ok(result.html.includes('<li>项目 1</li>'));
+    assert.ok(result.html.includes('<pre><code>'));
+    assert.ok(result.html.includes('<a href="https://example.com"'));
+    assert.equal(result.headings, 1);
+    assert.ok(result.codeBlocks >= 1);
+    assert.ok(result.links >= 1);
+    assert.equal(result.sections[0]?.level, 1);
+    assert.equal(result.sections[0]?.title, '标题一');
+  });
+
+  it('escapes V52 markdown inline code and limits headings to configured max level', () => {
+    const result = renderMarkdown('## 二级\n### 三级\n#### 四级', { maxHeadingLevel: 2 });
+    assert.ok(result.html.includes('<h2>二级</h2>'));
+    assert.ok(result.html.includes('<h2>三级</h2>'));
+    assert.ok(result.html.includes('<h2>四级</h2>'));
+    assert.ok(!result.html.includes('<h3'));
+    assert.ok(!result.html.includes('<h4'));
+  });
+
+  it('extracts V52 markdown outline filtered by max depth with stable index', () => {
+    const outline = extractMarkdownOutline('# 主标题\n## 章节 A\n### 子节\n#### 不应出现', 2);
+    assert.equal(outline.length, 2);
+    assert.equal(outline[0]?.title, '主标题');
+    assert.equal(outline[1]?.level, 2);
+    assert.equal(outline[1]?.title, '章节 A');
+    assert.ok(outline.every((section) => section.level <= 2));
+  });
+
+  it('builds V52 rich text toolbar with 8 actions each having label shortcut and wrap pattern', () => {
+    const toolbar = buildRichTextToolbar();
+    assert.equal(toolbar.length, 8);
+    assert.ok(toolbar.some((action) => action.id === 'bold' && action.before === '**'));
+    assert.ok(toolbar.some((action) => action.id === 'h1' && action.before === '# '));
+    assert.ok(toolbar.some((action) => action.id === 'link' && action.after.includes('https://')));
+    assert.ok(toolbar.every((action) => action.label && action.shortcut && action.before !== undefined && action.after !== undefined));
   });
 });
