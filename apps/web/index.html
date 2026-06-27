@@ -103,6 +103,9 @@
       .revision-list li { padding: 4px 0; border-bottom: 1px dashed var(--border); }
       .revision-list li:last-child { border-bottom: 0; }
       .revision-list li code { font-size: 11px; color: var(--text); }
+      .svg-frame { background: color-mix(in srgb, var(--panel) 70%, white); border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: flex; justify-content: center; }
+      .svg-frame svg { max-width: 100%; height: auto; color: var(--muted); }
+      .svg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
     </style>
   </head>
   <body>
@@ -120,6 +123,15 @@
       <nav id="web-nav-tabs" class="nav-tabs" aria-label="主导航"></nav>
       <div id="web-dashboard-summary" class="overlay" data-open="false" hidden></div>
       <div class="grid">
+        <section>
+          <h2>V44 可视化图谱（SVG）</h2>
+          <p class="hint">纯 SVG 字符串绘制，4 套主题自动适配。点击按钮渲染对应图谱。</p>
+          <div class="svg-grid">
+            <div><button id="viz-foreshadowing" class="secondary">伏笔关系图</button><div id="viz-foreshadowing-host"></div></div>
+            <div><button id="viz-character-arc" class="secondary">人物弧线</button><div id="viz-character-arc-host"></div></div>
+            <div><button id="viz-chapter-pacing" class="secondary">章节节奏</button><div id="viz-chapter-pacing-host"></div></div>
+          </div>
+        </section>
         <section>
           <h2>章节正文编辑器</h2>
           <textarea id="chapter-editor" rows="10" placeholder="在这里写当前章节正文……"></textarea>
@@ -1009,6 +1021,27 @@
       }
 
       let pendingShortcut = null;
+      function renderSvgPanel(kind, title, svg) {
+        output.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'panel-view';
+        const header = document.createElement('div');
+        header.className = 'panel-header';
+        const h2 = document.createElement('h2');
+        h2.className = 'panel-title';
+        h2.textContent = title;
+        header.appendChild(h2);
+        wrap.appendChild(header);
+        const sec = document.createElement('div');
+        sec.className = 'section';
+        const container = document.createElement('div');
+        container.className = 'svg-frame';
+        container.innerHTML = svg;
+        sec.appendChild(container);
+        wrap.appendChild(sec);
+        output.appendChild(wrap);
+      }
+
       function bindWebShortcuts() {
         document.addEventListener('keydown', (event) => {
           if (event.target.matches('input, textarea, select')) return;
@@ -1025,7 +1058,7 @@
         }, { passive: false });
       }
 
-      window.NovelWorkbench = Object.assign({}, { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, renderInteractivePanel, renderChapterEditor, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters }, { buildInteractivePanel: (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : () => null), buildChapterEditor: (typeof buildChapterEditor === 'function' ? buildChapterEditor : () => null), computeWordStats: (typeof computeWordStats === 'function' ? computeWordStats : () => null), planChapterSave: (typeof planChapterSave === 'function' ? planChapterSave : () => null), buildChapterContext: (typeof buildChapterContext === 'function' ? buildChapterContext : () => null), appendChapterRevision: (typeof appendChapterRevision === 'function' ? appendChapterRevision : () => null) });
+      window.NovelWorkbench = Object.assign({}, { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, renderInteractivePanel, renderChapterEditor, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters }, { buildInteractivePanel: (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : () => null), buildChapterEditor: (typeof buildChapterEditor === 'function' ? buildChapterEditor : () => null), computeWordStats: (typeof computeWordStats === 'function' ? computeWordStats : () => null), planChapterSave: (typeof planChapterSave === 'function' ? planChapterSave : () => null), buildChapterContext: (typeof buildChapterContext === 'function' ? buildChapterContext : () => null), appendChapterRevision: (typeof appendChapterRevision === 'function' ? appendChapterRevision : () => null), buildForeshadowingGraphSvg: (typeof buildForeshadowingGraphSvg === 'function' ? buildForeshadowingGraphSvg : () => null), buildCharacterArcSvg: (typeof buildCharacterArcSvg === 'function' ? buildCharacterArcSvg : () => null), buildChapterPacingSvg: (typeof buildChapterPacingSvg === 'function' ? buildChapterPacingSvg : () => null) });
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -1346,6 +1379,9 @@
       bindWebNavigation();
       bindWebShortcuts();
       bindChapterEditor();
+      document.getElementById('viz-foreshadowing').onclick = () => { const wb = window.NovelWorkbench; const g = wb?.buildForeshadowingGraphSvg?.(library.list()); if (g?.svg) document.getElementById('viz-foreshadowing-host').innerHTML = g.svg; };
+      document.getElementById('viz-character-arc').onclick = () => { const wb = window.NovelWorkbench; const a = wb?.buildCharacterArcSvg?.(library.list()); if (a?.svg) document.getElementById('viz-character-arc-host').innerHTML = a.svg; };
+      document.getElementById('viz-chapter-pacing').onclick = () => { const wb = window.NovelWorkbench; const p = wb?.buildChapterPacingSvg?.(library.list()); if (p?.svg) document.getElementById('viz-chapter-pacing-host').innerHTML = p.svg; };
     </script>
   </body>
 </html>

@@ -26,6 +26,9 @@ import {
   computeWordStats,
   planChapterSave,
   appendChapterRevision,
+  buildForeshadowingGraphSvg,
+  buildCharacterArcSvg,
+  buildChapterPacingSvg,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -436,5 +439,42 @@ describe('web-first studio models', () => {
     assert.equal(revs[9]?.excerpt, '草稿 11');
     assert.ok(revs[0]?.id.startsWith('rev-'));
     assert.ok(revs[0]?.wordCount > 0);
+  });
+
+  it('builds V44 foreshadowing graph SVG with positioned nodes status colors and dashed edges', () => {
+    const graph = buildForeshadowingGraphSvg(sampleArtifacts);
+    assert.ok(graph.svg.startsWith('<svg'));
+    assert.ok(graph.svg.includes('viewBox="0 0 480 280"'));
+    assert.ok(graph.svg.includes('#16a34a') || graph.svg.includes('#d97706') || graph.svg.includes('#b91c1c'));
+    assert.ok(graph.nodes.length >= 2);
+    assert.ok(graph.nodes.every((node) => typeof node.x === 'number' && typeof node.y === 'number'));
+    assert.ok(graph.edges.length >= 1);
+    assert.ok(graph.svg.includes('stroke-dasharray="4 4"'));
+  });
+
+  it('builds V44 character arc SVG with polyline chapters and one point per artifact', () => {
+    const arc = buildCharacterArcSvg(sampleArtifacts);
+    assert.ok(arc.svg.includes('<polyline'));
+    assert.ok(arc.svg.includes('stroke="#2563eb"'));
+    assert.equal(arc.points.length, sampleArtifacts.length);
+    assert.ok(arc.points.every((point) => point.chapter >= 1));
+    assert.ok(/第\d+章/.test(arc.svg) || arc.svg.includes('异常的开端') || arc.svg.includes('线索'));
+  });
+
+  it('builds V44 chapter pacing SVG with bars capped at 8 chapters word labels and axis baseline', () => {
+    const pacing = buildChapterPacingSvg(sampleArtifacts);
+    assert.ok(pacing.svg.includes('<svg'));
+    assert.ok(pacing.bars.length <= 8);
+    assert.ok(pacing.bars.length >= 1);
+    assert.ok(pacing.bars.every((bar) => bar.words > 0));
+    assert.ok(pacing.svg.includes('<rect'));
+    assert.ok(pacing.svg.includes('stroke-opacity'));
+  });
+
+  it('escapes V44 SVG text safely so chapter titles with quotes do not break markup', () => {
+    const quirky = [{ ...sampleArtifacts[0]!, chapterTitle: '《<>&"\'' , artifact: { ...sampleArtifacts[0]!.artifact, outline: [{ chapter: 1, title: '《<>&"\'', summary: 'x' }] } }];
+    const arc = buildCharacterArcSvg(quirky);
+    assert.ok(!arc.svg.includes('<>&"\''));
+    assert.ok(arc.svg.includes('&lt;') || arc.svg.includes('&amp;') || arc.svg.includes('&quot;'));
   });
 });

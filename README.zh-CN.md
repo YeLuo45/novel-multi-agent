@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V44 Web 可视化层（SVG 图谱 / 人物弧线 / 章节节奏）
+
+- `buildForeshadowingGraphSvg(items)`：从 artifacts 收集去重伏笔，按 recovered/open/overdue/missing 4 色渲染圆形节点（极坐标布局），节点间用 4-4 dasharray 虚线连接，返回 `<svg>` markup string。
+- `buildCharacterArcSvg(artifacts)`：每个 artifact 一个折线点（蓝 #2563eb），x 轴按 chapter 平铺，y 轴按 arcIndex 偏移，文本标签取 `outline[0].title || chapterTitle`。
+- `buildChapterPacingSvg(artifacts)`：最多 8 个章节柱图（绿 #16a34a），bar 高度按 `wordCount ?? summaryLen*6` 归一化，文本显示章节标题（前 6 字）和字数。
+- `svgEscape()`：HTML/XML 转义 `& < > " '` 为 entity，防止恶意 title 注入 SVG。
+- HTML 集成：3 个 inline 按钮 + `.svg-frame` 主题感知容器 + `.svg-grid` 响应式网格，4 套主题通过 `currentColor` + `var()` 自动适配。
+- vm sandbox 兼容：3 个 SVG 函数通过 `Object.assign` + typeof guard 注入。
+
 ## V43 Web 章节正文编辑器 + 续写上下文侧栏
 
 - `buildChapterContext(artifact)`：从 artifact 提取角色（含出场次数）/ 伏笔（recovered/open/overdue/missing 状态）/ 文风指纹 / 最近章节摘要。

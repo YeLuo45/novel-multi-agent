@@ -249,6 +249,157 @@ export function appendChapterRevision(revisions: ChapterRevision[], body: string
   return [...revisions, next].slice(-10);
 }
 
+export interface ForeshadowingNode {
+  id: string;
+  name: string;
+  status: 'recovered' | 'open' | 'overdue' | 'missing';
+  x: number;
+  y: number;
+}
+
+export interface ForeshadowingEdge {
+  source: string;
+  target: string;
+  label?: string;
+}
+
+export interface ForeshadowingGraphSvg {
+  svg: string;
+  nodes: ForeshadowingNode[];
+  edges: ForeshadowingEdge[];
+  width: number;
+  height: number;
+}
+
+export interface CharacterArcPoint {
+  projectId: string;
+  chapter: number;
+  arcIndex: number;
+}
+
+export interface CharacterArcSvg {
+  svg: string;
+  points: CharacterArcPoint[];
+  width: number;
+  height: number;
+}
+
+export interface ChapterPacingBar {
+  chapter: number;
+  title: string;
+  words: number;
+  foreshadowing: number;
+}
+
+export interface ChapterPacingSvg {
+  svg: string;
+  bars: ChapterPacingBar[];
+  width: number;
+  height: number;
+}
+
+function svgEscape(text: string): string {
+  return String(text ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
+}
+
+export function buildForeshadowingGraphSvg(items: StudioArtifact[]): ForeshadowingGraphSvg {
+  const width = 480;
+  const height = 280;
+  const map = new Map<string, { name: string; status: ForeshadowingNode['status']; sources: Set<string> }>();
+  for (const artifact of items) {
+    const title = artifact.title || artifact.projectId;
+    for (const entry of artifact.artifact?.foreshadowing ?? []) {
+      const [name = entry, status = 'open'] = entry.split(':');
+      const key = name.trim();
+      const existing = map.get(key) ?? { name: key, status: status.trim().toLowerCase() as ForeshadowingNode['status'], sources: new Set<string>() };
+      existing.sources.add(title);
+      map.set(key, existing);
+    }
+  }
+  const entries = [...map.entries()];
+  const radius = 90;
+  const cx = width / 2;
+  const cy = height / 2;
+  const nodes: ForeshadowingNode[] = entries.map(([id, info], index) => {
+    const angle = (index / Math.max(1, entries.length)) * Math.PI * 2;
+    return {
+      id,
+      name: info.name,
+      status: info.status,
+      x: Math.round(cx + Math.cos(angle) * radius),
+      y: Math.round(cy + Math.sin(angle) * radius),
+    };
+  });
+  const colorByStatus: Record<ForeshadowingNode['status'], string> = {
+    recovered: '#16a34a',
+    open: '#d97706',
+    overdue: '#b91c1c',
+    missing: '#64748b',
+  };
+  const nodeMarkup = nodes.map((node) => `<g><circle cx="${node.x}" cy="${node.y}" r="20" fill="${colorByStatus[node.status]}" fill-opacity="0.18" stroke="${colorByStatus[node.status]}" stroke-width="2" /><text x="${node.x}" y="${node.y + 4}" text-anchor="middle" font-size="11" fill="currentColor">${svgEscape(node.name.slice(0, 6))}</text></g>`).join('');
+  const edges: ForeshadowingEdge[] = [];
+  const linkMarkup = nodes.slice(1).map((node, idx) => {
+    const prev = nodes[idx];
+    if (!prev) return '';
+    edges.push({ source: prev.id, target: node.id });
+    return `<line x1="${prev.x}" y1="${prev.y}" x2="${node.x}" y2="${node.y}" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 4" />`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="伏笔关系图"><rect width="${width}" height="${height}" fill="transparent" />${linkMarkup}${nodeMarkup}</svg>`;
+  return { svg, nodes, edges, width, height };
+}
+
+export function buildCharacterArcSvg(artifacts: StudioArtifact[]): CharacterArcSvg {
+  const width = 480;
+  const height = 200;
+  const sorted = latestFirst(artifacts);
+  const points: CharacterArcPoint[] = sorted.map((artifact, index) => ({
+    projectId: artifact.projectId,
+    chapter: artifact.artifact?.outline?.[0]?.chapter ?? index + 1,
+    arcIndex: index,
+  }));
+  const stepX = points.length > 1 ? (width - 60) / (points.length - 1) : 0;
+  const polyline = points.map((point, index) => {
+    const x = 30 + index * stepX;
+    const y = height - 40 - (point.arcIndex * 14);
+    return `${x},${y}`;
+  }).join(' ');
+  const circleMarkup = points.map((point, index) => {
+    const x = 30 + index * stepX;
+    const y = height - 40 - (point.arcIndex * 14);
+    const artifact = sorted[index];
+    const label = artifact?.artifact?.outline?.[0]?.title ?? artifact?.chapterTitle ?? `第${point.chapter}章`;
+    return `<g><circle cx="${x}" cy="${y}" r="5" fill="#2563eb" /><text x="${x}" y="${height - 18}" text-anchor="middle" font-size="10" fill="currentColor">${svgEscape(String(label).slice(0, 12))}</text></g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="人物弧线"><polyline points="${polyline}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" />${circleMarkup}</svg>`;
+  return { svg, points, width, height };
+}
+
+export function buildChapterPacingSvg(artifacts: StudioArtifact[]): ChapterPacingSvg {
+  const width = 480;
+  const height = 200;
+  const sorted = latestFirst(artifacts).slice(0, 8);
+  const bars: ChapterPacingBar[] = sorted.map((artifact, index) => {
+    const outline = artifact.artifact?.outline ?? [];
+    const summaryLen = (artifact.artifact?.chapterSummary?.length ?? 0) + (artifact.artifact?.continuationContext?.length ?? 0);
+    return {
+      chapter: outline[0]?.chapter ?? index + 1,
+      title: outline[0]?.title ?? artifact.chapterTitle ?? `第${index + 1}章`,
+      words: Number((artifact.artifact as { wordCount?: number } | undefined)?.wordCount ?? Math.max(60, Math.min(1200, summaryLen * 6))),
+      foreshadowing: (artifact.artifact?.foreshadowing ?? []).length,
+    };
+  });
+  const maxWords = Math.max(1, ...bars.map((bar) => bar.words));
+  const barWidth = bars.length > 0 ? (width - 60) / bars.length : 0;
+  const barMarkup = bars.map((bar, index) => {
+    const x = 30 + index * barWidth;
+    const barHeight = Math.round((bar.words / maxWords) * (height - 60));
+    const y = height - 30 - barHeight;
+    return `<g><rect x="${x + 4}" y="${y}" width="${barWidth - 8}" height="${barHeight}" fill="#16a34a" fill-opacity="0.7" rx="4" /><text x="${x + barWidth / 2}" y="${height - 14}" text-anchor="middle" font-size="10" fill="currentColor">${svgEscape(bar.title.slice(0, 6))}</text><text x="${x + barWidth / 2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="currentColor">${bar.words}</text></g>`;
+  }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="章节节奏"><line x1="30" y1="${height - 30}" x2="${width - 30}" y2="${height - 30}" stroke="currentColor" stroke-opacity="0.3" />${barMarkup}</svg>`;
+  return { svg, bars, width, height };
+}
+
 export interface InteractivePanelSection {
   kind: 'metric' | 'progress' | 'list' | 'tree' | 'bar' | 'note';
   heading?: string;
