@@ -427,6 +427,114 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface IndexedDbSchemaStore {
+  name: string;
+  keyPath: string;
+  autoIncrement: boolean;
+  indexes: Array<{ name: string; keyPath: string; unique: boolean; multiEntry: boolean }>;
+}
+
+export interface IndexedDbSchema {
+  name: string;
+  version: number;
+  stores: IndexedDbSchemaStore[];
+}
+
+export interface IndexedDbAdapter {
+  schema: IndexedDbSchema;
+  operations: string[];
+  fallbackStorageKey: string;
+  ready: boolean;
+  warnings: string[];
+}
+
+export interface MigrationScript {
+  source: 'localStorage' | 'memory' | 'json' | 'csv';
+  sourceKey: string;
+  target: 'indexedDb' | 'localStorage' | 'json';
+  steps: string[];
+  totalItems: number;
+  totalBytes: number;
+  estimatedDurationMs: number;
+  dryRun: boolean;
+}
+
+export function buildIndexedDbSchema(options: { name?: string; version?: number; stores?: IndexedDbSchemaStore[] } = {}): IndexedDbSchema {
+  return {
+    name: options.name ?? 'novel-ma',
+    version: options.version ?? 1,
+    stores: options.stores ?? [
+      {
+        name: 'projects',
+        keyPath: 'projectId',
+        autoIncrement: false,
+        indexes: [
+          { name: 'updatedAt', keyPath: 'updatedAt', unique: false, multiEntry: false },
+          { name: 'mode', keyPath: 'mode', unique: false, multiEntry: false },
+          { name: 'stage', keyPath: 'stage', unique: false, multiEntry: false },
+        ],
+      },
+      {
+        name: 'tags',
+        keyPath: 'tag',
+        autoIncrement: false,
+        indexes: [{ name: 'projectId', keyPath: 'projectIds', unique: false, multiEntry: true }],
+      },
+      {
+        name: 'undo',
+        keyPath: 'id',
+        autoIncrement: false,
+        indexes: [{ name: 'createdAt', keyPath: 'createdAt', unique: false, multiEntry: false }],
+      },
+    ],
+  };
+}
+
+export function buildIndexedDbAdapter(options: { fallbackStorageKey?: string; schema?: IndexedDbSchema; supportsIdb?: boolean } = {}): IndexedDbAdapter {
+  const fallbackStorageKey = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const schema = options.schema ?? buildIndexedDbSchema();
+  const supportsIdb = options.supportsIdb ?? true;
+  const operations: string[] = ['open', 'list', 'get', 'put', 'delete', 'migrate-from-localStorage', 'export', 'import'];
+  const warnings: string[] = [];
+  if (!supportsIdb) warnings.push('IndexedDB not supported in this environment; falling back to localStorage');
+  if (schema.stores.length === 0) warnings.push('schema has 0 stores; adapter will be a no-op');
+  return { schema, operations, fallbackStorageKey, ready: warnings.length === 0, warnings };
+}
+
+export function buildMigrationScript(options: { source?: MigrationScript['source']; sourceKey?: string; target?: MigrationScript['target']; items?: unknown[]; dryRun?: boolean } = {}): MigrationScript {
+  const source = options.source ?? 'localStorage';
+  const sourceKey = options.sourceKey ?? 'novel-ma:artifacts';
+  const target = options.target ?? 'indexedDb';
+  const items = options.items ?? [];
+  const totalItems = items.length;
+  const totalBytes = JSON.stringify(items).length * 2;
+  const estimatedDurationMs = Math.max(1, Math.round(totalBytes / 10000));
+  const steps: string[] = [];
+  if (source === 'localStorage') {
+    steps.push(`读取 localStorage['${sourceKey}'] 并 JSON.parse`);
+  } else if (source === 'json') {
+    steps.push(`读取 JSON 字符串并 JSON.parse`);
+  } else if (source === 'csv') {
+    steps.push(`解析 CSV header + rows，转换为 artifact 数组`);
+  } else {
+    steps.push(`从内存对象直接复制`);
+  }
+  steps.push(`校验 schemaVersion=2（否则 normalizeArtifact 升级）`);
+  steps.push(`打开 IDB ${target === 'indexedDb' ? 'novel-ma v1' : ''} 并逐项 put`);
+  steps.push(`写入完成后 IDB list 校验导入数 === 源数`);
+  steps.push(`保留 source 一份作为 fallback storageKey=${sourceKey}`);
+  return {
+    source,
+    sourceKey,
+    target,
+    steps,
+    totalItems,
+    totalBytes,
+    estimatedDurationMs,
+    dryRun: options.dryRun ?? false,
+  };
+}
+
 export interface ArtifactSyncReport {
   scannedFiles: number;
   importedCount: number;

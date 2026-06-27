@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V51 Web IndexedDB 真实迁移（schema + adapter + migration script）
+
+- `buildIndexedDbSchema()`：3 表（projects/tags/undo）+ 5 索引（updatedAt/mode/stage + projectIds multiEntry + createdAt）；dbName `novel-ma` v1。
+- `buildIndexedDbAdapter()`：8 个 operation 名（open/list/get/put/delete/migrate-from-localStorage/export/import）+ fallbackStorageKey `novel-ma:artifacts` + ready flag + warnings（不支持 IDB / 0 stores）。
+- `buildMigrationScript()`：source（localStorage/memory/json/csv）+ target（indexedDb/localStorage/json）+ steps[]（读 → 校验 schemaVersion → 打开 IDB → 逐项 put → 校验导入数 → 保留 source fallback）+ dryRun flag + 估算 durationMs。
+- HTML 集成：3 个 inline 按钮（schema/adapter/migration），复用 `.diff-summary` + `.wizard-steps` 风格。
+- vm sandbox 兼容：3 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V50 Web CLI 项目同步（File API + parseArtifactIndex + planArtifactSync）
 
 - `parseArtifactIndex(files)`：批量解析 `{path, json}[]`，坏 JSON 进 `issues`（reason: `json: ...`），缺少 `projectId` 也进 issues；正常 artifact 进 `items`。

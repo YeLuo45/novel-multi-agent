@@ -47,6 +47,9 @@ import {
   buildAgentTraceView,
   parseArtifactIndex,
   planArtifactSync,
+  buildIndexedDbSchema,
+  buildIndexedDbAdapter,
+  buildMigrationScript,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -747,5 +750,53 @@ describe('web-first studio models', () => {
 
     const noFilter = planArtifactSync(files);
     assert.ok(noFilter.importedCount >= 1);
+  });
+
+  it('builds V51 IndexedDB schema with projects tags undo stores and 4 indexes', () => {
+    const schema = buildIndexedDbSchema();
+    assert.equal(schema.name, 'novel-ma');
+    assert.equal(schema.version, 1);
+    assert.equal(schema.stores.length, 3);
+    const projects = schema.stores.find((store) => store.name === 'projects');
+    assert.ok(projects);
+    assert.equal(projects.keyPath, 'projectId');
+    assert.equal(projects.indexes.length, 3);
+    const undo = schema.stores.find((store) => store.name === 'undo');
+    assert.ok(undo?.indexes.some((index) => index.name === 'createdAt'));
+  });
+
+  it('builds V51 IndexedDB adapter with operations fallback key ready flag and warnings', () => {
+    const adapter = buildIndexedDbAdapter();
+    assert.equal(adapter.fallbackStorageKey, 'novel-ma:artifacts');
+    assert.ok(adapter.operations.includes('migrate-from-localStorage'));
+    assert.equal(adapter.ready, true);
+    assert.equal(adapter.warnings.length, 0);
+
+    const noIdb = buildIndexedDbAdapter({ supportsIdb: false });
+    assert.equal(noIdb.ready, false);
+    assert.ok(noIdb.warnings.some((line) => line.includes('IndexedDB not supported')));
+
+    const emptySchema = buildIndexedDbAdapter({ schema: { name: 'x', version: 1, stores: [] } });
+    assert.ok(emptySchema.warnings.some((line) => line.includes('0 stores')));
+  });
+
+  it('builds V51 migration script with steps total items bytes estimated duration and dry run', () => {
+    const script = buildMigrationScript({
+      source: 'localStorage',
+      sourceKey: 'novel-ma:artifacts',
+      target: 'indexedDb',
+      items: sampleArtifacts,
+      dryRun: true,
+    });
+    assert.equal(script.source, 'localStorage');
+    assert.equal(script.sourceKey, 'novel-ma:artifacts');
+    assert.equal(script.target, 'indexedDb');
+    assert.equal(script.totalItems, sampleArtifacts.length);
+    assert.ok(script.totalBytes > 0);
+    assert.ok(script.estimatedDurationMs >= 1);
+    assert.equal(script.dryRun, true);
+    assert.ok(script.steps.length >= 4);
+    assert.ok(script.steps.some((step) => step.includes('读取 localStorage')));
+    assert.ok(script.steps.some((step) => step.includes('schemaVersion=2')));
   });
 });
