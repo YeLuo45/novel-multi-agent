@@ -24,6 +24,99 @@ export interface SurfaceAction {
   tui: { visible: boolean; label: string };
 }
 
+export type WebViewId = 'dashboard' | 'create' | 'library' | 'quality' | 'hub' | 'help';
+
+export interface WebNavTab {
+  id: WebViewId;
+  label: string;
+  hint: string;
+  shortcut?: string;
+}
+
+export interface WebDefaultView {
+  activeView: WebViewId;
+  navTabs: WebNavTab[];
+  welcomeDismissed: boolean;
+  onboarding: WebOnboardingStep[];
+}
+
+export interface WebOnboardingStep {
+  step: 1 | 2 | 3;
+  title: string;
+  body: string;
+  cta: { label: string; view: WebViewId };
+  cli: string;
+}
+
+export interface WebHelpEntry {
+  shortcut: string;
+  label: string;
+  view?: WebViewId;
+}
+
+export function buildWebNavigation(): WebNavTab[] {
+  return [
+    { id: 'dashboard', label: '总控台', hint: '最近项目 + 健康指标 + 快捷动作', shortcut: 'g d' },
+    { id: 'create', label: '新建', hint: '主题创作、章节续写、伏笔评分', shortcut: 'g n' },
+    { id: 'library', label: '项目库', hint: '本地库 + 版本树 + 标签搜索', shortcut: 'g l' },
+    { id: 'quality', label: '质量', hint: '角色 / 伏笔 / 文风子分数', shortcut: 'g q' },
+    { id: 'hub', label: '全方向', hint: '总控台、长篇 OS、Agent 流水线', shortcut: 'g h' },
+    { id: 'help', label: '帮助', hint: '键盘快捷键 + 键盘导航', shortcut: '?' },
+  ];
+}
+
+export function buildWebOnboarding(): WebOnboardingStep[] {
+  return [
+    {
+      step: 1,
+      title: '从主题开始',
+      body: '在「新建」页输入主题（如「月球图书馆的守夜人」），生成 artifact 草案并自动写入本地项目库。',
+      cta: { label: '打开新建', view: 'create' },
+      cli: 'novel-ma new "月球图书馆的守夜人" --chapters 3 --words 900',
+    },
+    {
+      step: 2,
+      title: '继续已有章节',
+      body: '粘贴已有章节正文，自动识别「第 X 章」标题，生成续写上下文 + 角色 / 伏笔 / 文风指纹。',
+      cta: { label: '打开续写', view: 'create' },
+      cli: 'novel-ma continue <file> --words 900',
+    },
+    {
+      step: 3,
+      title: '查看总控台',
+      body: '总控台会汇总：真数据写作闭环、本地持久化、Provider smoke、Pages 验收、长篇 OS、多 Agent 流水线。',
+      cta: { label: '打开总控台', view: 'hub' },
+      cli: 'novel-ma mode-parity',
+    },
+  ];
+}
+
+export function buildWebHelp(tabs: WebNavTab[] = buildWebNavigation()): WebHelpEntry[] {
+  const entries: WebHelpEntry[] = [
+    { shortcut: 'g d', label: '跳转到总控台', view: 'dashboard' },
+    { shortcut: 'g n', label: '跳转到新建', view: 'create' },
+    { shortcut: 'g l', label: '跳转到项目库', view: 'library' },
+    { shortcut: 'g q', label: '跳转到质量', view: 'quality' },
+    { shortcut: 'g h', label: '跳转全方向', view: 'hub' },
+    { shortcut: '?', label: '显示 / 隐藏帮助浮层' },
+    { shortcut: 'Esc', label: '关闭弹层 / 返回总控台' },
+    { shortcut: 'Ctrl+S', label: '保存当前 artifact 到项目库' },
+    { shortcut: 'Ctrl+E', label: '打开章节编辑器（Focus Mode）' },
+    { shortcut: 'Ctrl+Shift+D', label: '切换主题（light/dark/sepia/nord）' },
+  ];
+  const known = new Set(tabs.map((tab) => tab.shortcut ?? ''));
+  return entries.filter((entry) => !entry.view || known.has(entry.shortcut));
+}
+
+export function buildWebDefaultView(options: { activeView?: WebViewId; dismissed?: boolean } = {}): WebDefaultView {
+  return {
+    activeView: options.activeView ?? 'dashboard',
+    navTabs: buildWebNavigation(),
+    welcomeDismissed: Boolean(options.dismissed),
+    onboarding: buildWebOnboarding(),
+  };
+}
+
 function textOf(artifact: StudioArtifact): string {
   const body = artifact.artifact ?? {};
   return [

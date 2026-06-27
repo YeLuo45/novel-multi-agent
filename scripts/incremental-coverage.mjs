@@ -20,6 +20,7 @@ const targets = {
   'packages/core/src/chapter-importer.ts': ['parseImportedChapters'],
   'packages/core/src/foreshadowing-score.ts': ['scoreForeshadowingRecovery'],
   'packages/agents/src/deterministic-agents.ts': ['runBibleAgent', 'runWriterAgent', 'runMemoryAgent'],
+  'packages/cli/src/web-studio.ts': ['buildWebNavigation', 'buildWebOnboarding', 'buildWebHelp', 'buildWebDefaultView'],
 };
 
 function normalizeUrl(url) {

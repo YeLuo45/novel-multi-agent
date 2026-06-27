@@ -74,8 +74,14 @@ describe('web workbench and ci scaffolding', () => {
       window: {},
       document: {
         documentElement: { dataset: {} },
+        addEventListener() {},
+        createElement(tag: string) {
+          const node: any = { tagName: tag.toUpperCase(), children: [], dataset: {}, attributes: {}, style: {}, classList: { add() {}, remove() {}, contains() { return false; } }, appendChild(child: any) { this.children.push(child); return child; }, append(...children: any[]) { for (const child of children) this.children.push(child); return this; }, setAttribute(name: string, value: string) { this.attributes[name] = value; }, removeAttribute(name: string) { delete this.attributes[name]; }, addEventListener() {}, querySelectorAll() { return []; }, querySelector() { return null; }, get innerHTML() { return ''; }, set innerHTML(value: string) { this._innerHTML = value; } };
+          return node;
+        },
         getElementById() {
-          return { value: '', textContent: '', disabled: false, onclick: undefined, addEventListener() {} };
+          const node: any = { value: '', textContent: '', disabled: false, onclick: undefined, addEventListener() {}, innerHTML: '', hidden: false, dataset: {}, attributes: {}, style: {}, classList: { add() {}, remove() {}, contains() { return false; } }, appendChild(child: any) { return child; }, append(...children: any[]) { return this; }, setAttribute(name: string, value: string) { this.attributes[name] = value; }, removeAttribute(name: string) { delete this.attributes[name]; }, title: '', querySelectorAll() { return []; }, querySelector() { return null; } };
+          return node;
         },
       },
       Blob: class Blob {},
@@ -118,8 +124,14 @@ describe('web workbench and ci scaffolding', () => {
       window: {},
       document: {
         documentElement: { dataset: {} },
+        addEventListener() {},
+        createElement(tag: string) {
+          const node: any = { tagName: tag.toUpperCase(), children: [], dataset: {}, attributes: {}, style: {}, classList: { add() {}, remove() {}, contains() { return false; } }, appendChild(child: any) { this.children.push(child); return child; }, append(...children: any[]) { for (const child of children) this.children.push(child); return this; }, setAttribute(name: string, value: string) { this.attributes[name] = value; }, removeAttribute(name: string) { delete this.attributes[name]; }, addEventListener() {}, querySelectorAll() { return []; }, querySelector() { return null; }, get innerHTML() { return ''; }, set innerHTML(value: string) { this._innerHTML = value; } };
+          return node;
+        },
         getElementById() {
-          return { value: '', textContent: '', disabled: false, onclick: undefined, addEventListener() {}, innerHTML: '' };
+          const node: any = { value: '', textContent: '', disabled: false, onclick: undefined, addEventListener() {}, innerHTML: '', hidden: false, dataset: {}, attributes: {}, style: {}, classList: { add() {}, remove() {}, contains() { return false; } }, appendChild(child: any) { return child; }, append(...children: any[]) { return this; }, setAttribute(name: string, value: string) { this.attributes[name] = value; }, removeAttribute(name: string) { delete this.attributes[name]; }, title: '', querySelectorAll() { return []; }, querySelector() { return null; } };
+          return node;
         },
         querySelectorAll() { return []; },
       },

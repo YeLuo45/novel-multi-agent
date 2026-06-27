@@ -16,6 +16,10 @@ import {
   buildWebArtifactLibrary,
   buildWebProjectDashboard,
   buildWebTuiSurfaceContract,
+  buildWebDefaultView,
+  buildWebHelp,
+  buildWebNavigation,
+  buildWebOnboarding,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -224,5 +228,46 @@ describe('web-first studio models', () => {
     assert.equal(revision.operation, 'persist-revision');
     assert.ok(revision.diff.some((item) => item.field === 'chapterTitle'));
     assert.ok(revision.catalogUpdate.searchableText.includes('馆长'));
+  });
+
+  it('builds V41 navigation tabs covering dashboard create library quality hub and help with shortcuts', () => {
+    const tabs = buildWebNavigation();
+    assert.equal(tabs.length, 6);
+    assert.deepEqual(tabs.map((tab) => tab.id), ['dashboard', 'create', 'library', 'quality', 'hub', 'help']);
+    assert.ok(tabs.every((tab) => tab.label && tab.hint && tab.shortcut));
+    assert.ok(tabs.find((tab) => tab.id === 'help')?.shortcut === '?');
+  });
+
+  it('builds V41 onboarding steps with progressive disclosure and CLI anchors', () => {
+    const steps = buildWebOnboarding();
+    assert.equal(steps.length, 3);
+    assert.deepEqual(steps.map((step) => step.step), [1, 2, 3]);
+    assert.ok(steps.every((step) => step.cta.label && step.cta.view && step.cli.startsWith('novel-ma ')));
+    assert.ok(steps[0]?.title.includes('主题'));
+    assert.ok(steps[1]?.title.includes('继续'));
+    assert.ok(steps[2]?.title.includes('总控台'));
+  });
+
+  it('builds V41 help entries filtered to known nav shortcuts plus global hotkeys', () => {
+    const tabs = buildWebNavigation();
+    const help = buildWebHelp(tabs);
+    const navShortcuts = new Set(tabs.map((tab) => tab.shortcut ?? ''));
+    assert.ok(help.every((entry) => !entry.view || navShortcuts.has(entry.shortcut)));
+    assert.ok(help.some((entry) => entry.shortcut === '?'));
+    assert.ok(help.some((entry) => entry.shortcut === 'Ctrl+S'));
+    assert.ok(help.some((entry) => entry.shortcut === 'Esc'));
+  });
+
+  it('builds V41 default view with active tab onboarding dismiss flag and stable ordering', () => {
+    const view = buildWebDefaultView();
+    assert.equal(view.activeView, 'dashboard');
+    assert.equal(view.navTabs.length, 6);
+    assert.equal(view.onboarding.length, 3);
+    assert.equal(view.welcomeDismissed, false);
+
+    const dismissed = buildWebDefaultView({ activeView: 'library', dismissed: true });
+    assert.equal(dismissed.activeView, 'library');
+    assert.equal(dismissed.welcomeDismissed, true);
+    assert.deepEqual(dismissed.onboarding.map((step) => step.step), [1, 2, 3]);
   });
 });

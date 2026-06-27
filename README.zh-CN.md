@@ -49,6 +49,16 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V41 Web 可发现性重塑（导航 + 默认视图 + Onboarding）
+
+- 顶部 tab 导航：总控台 / 新建 / 项目库 / 质量 / 全方向 / 帮助 六张切换卡，按主题分块切换 `.grid > section` 显隐。
+- 默认视图：刷新页面进入「总控台」（所有 section 可见），其他 view 过滤隐藏不相关卡片。
+- 3 步 Onboarding 弹窗：首次访问显示「主题创作 → 续写 → 总控台」三步引导，每步含 CLI 锚点和一键跳转。
+- 帮助浮层：按 `?` 打开 / `Esc` 关闭，列出 10 个快捷键（g d / g n / g l / g q / g h / ? / Esc / Ctrl+S / Ctrl+E / Ctrl+Shift+D）。
+- Vim 风格导航：连续按 `g d` / `g n` / `g l` / `g q` / `g h` 在视图间跳转（800ms 窗口）。
+- Onboarding 状态持久化：localStorage key `novel-ma:onboarding-dismissed`，关闭后不再打扰。
+- 纯函数 + vm sandbox 兼容：`buildWebNavigation / buildWebOnboarding / buildWebHelp / buildWebDefaultView` 全部走 `packages/cli/src/web-studio.ts`，CLI 单元测试和 vm HTML 渲染测试都能复用。
+
 ## V35-V40 新增能力
 
 - V35 Verify Pages Script：生成 `npm run verify:pages` 对应的 root、Web、TUI marker 检查脚本模型。

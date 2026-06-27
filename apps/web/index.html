@@ -16,6 +16,7 @@
       .toolbar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
       section { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 22px; box-shadow: 0 12px 30px rgba(20,20,20,.08); }
+      section[hidden] { display: none; }
       textarea, input, select { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: color-mix(in srgb, var(--panel) 82%, white); color: inherit; }
       button { margin-top: 12px; border: 0; border-radius: 999px; padding: 10px 16px; background: var(--accent); color: white; cursor: pointer; }
       button.secondary { background: var(--accent-2); }
@@ -23,6 +24,25 @@
       pre { white-space: pre-wrap; background: var(--code); color: var(--code-text); border-radius: 14px; padding: 16px; min-height: 220px; overflow: auto; }
       .hint, .library { color: var(--muted); font-size: 14px; line-height: 1.5; }
       .library button { margin-right: 8px; margin-top: 6px; padding: 7px 10px; }
+      .nav-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 18px auto 24px; max-width: 720px; padding: 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); }
+      .nav-tabs button { margin: 0; padding: 8px 18px; border-radius: 999px; background: transparent; color: var(--muted); border: 0; }
+      .nav-tabs button[aria-current="true"] { background: var(--accent); color: white; }
+      .nav-tabs button:hover { color: var(--text); }
+      .nav-tabs button[aria-current="true"]:hover { color: white; }
+      .overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .55); display: none; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+      .overlay[data-open="true"] { display: flex; }
+      .overlay-card { max-width: 560px; width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 18px; padding: 28px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+      .overlay-card h2 { margin: 0 0 8px; }
+      .overlay-card .step { display: flex; gap: 14px; align-items: flex-start; padding: 12px 0; border-top: 1px dashed var(--border); }
+      .overlay-card .step:first-of-type { border-top: 0; }
+      .overlay-card .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 600; }
+      .overlay-card .step code { display: inline-block; background: var(--code); color: var(--code-text); padding: 4px 8px; border-radius: 8px; font-size: 12px; margin-top: 4px; }
+      .overlay-card .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+      .overlay-card .actions button { margin: 0; }
+      .overlay-card table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+      .overlay-card th, .overlay-card td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+      .overlay-card kbd { background: var(--code); color: var(--code-text); padding: 2px 8px; border-radius: 6px; font-size: 12px; font-family: inherit; }
+      .help-hint { color: var(--muted); font-size: 13px; }
     </style>
   </head>
   <body>
@@ -34,8 +54,11 @@
           <label>主题切换 <select id="theme-switcher"><option value="light">light</option><option value="dark">dark</option><option value="sepia">sepia</option><option value="nord">nord</option></select></label>
           <button id="save-library" class="secondary">保存到本地项目库</button>
           <button id="export-library" class="secondary">导出项目库</button>
+          <button id="open-help" class="secondary" aria-label="帮助（?）">?</button>
         </div>
       </header>
+      <nav id="web-nav-tabs" class="nav-tabs" aria-label="主导航"></nav>
+      <div id="web-dashboard-summary" class="overlay" data-open="false" hidden></div>
       <div class="grid">
         <section>
           <h2>根据主题创建</h2>
@@ -196,6 +219,26 @@
       <button class="secondary" id="download" disabled>下载 artifact JSON</button>
       <pre id="output">等待操作...</pre>
     </main>
+    <aside id="web-onboarding" class="overlay" data-open="false" aria-modal="true" role="dialog" aria-labelledby="web-onboarding-title">
+      <div class="overlay-card">
+        <h2 id="web-onboarding-title">3 步上手 novel-multi-agent 工作台</h2>
+        <p class="help-hint">本地零依赖浏览器工作台。下面三个步骤对应三个核心入口，完成后可关闭此弹层。</p>
+        <div id="web-onboarding-body"></div>
+        <div class="actions">
+          <button id="web-onboarding-close" class="secondary">开始使用</button>
+        </div>
+      </div>
+    </aside>
+    <aside id="web-help" class="overlay" data-open="false" aria-modal="true" role="dialog" aria-labelledby="web-help-title">
+      <div class="overlay-card">
+        <h2 id="web-help-title">键盘快捷键 + 导航</h2>
+        <p class="help-hint">所有面板的快捷操作和视图跳转。再次按 <kbd>?</kbd> 或 <kbd>Esc</kbd> 关闭。</p>
+        <div id="web-help-body"></div>
+        <div class="actions">
+          <button id="web-help-close" class="secondary">关闭</button>
+        </div>
+      </div>
+    </aside>
     <script>
       const LIBRARY_KEY = 'novel-ma:artifacts';
       const THEME_KEY = 'novel-ma:theme';
@@ -749,7 +792,157 @@
         return { kind: 'execution-suite', title: 'V35-V40 Execution Suite', pages: generatePagesVerifyScript(), provider: createExecutableProviderSmoke(), workspace: loadRealArtifactWorkspace([{ path: `.novel-ma/projects/${seed.projectId}/artifact.json`, json: JSON.stringify(seed) }]), agentRunner: runExecutableAgentPipeline(seed), risks: scoreLongformProjectRisks(items.length ? items : [seed]), editorRevision: planPersistentEditorRevision(seed, { chapterTitle: seed.chapterTitle || '第1章 修订版', character: '馆长：掌管门禁' }) };
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      const VIEW_GROUPS = {
+        dashboard: { selector: '.grid > section', predicate: () => true },
+        create: { selector: '.grid > section', predicate: (section) => /根据主题|根据已有|伏笔回收|Provider 实战|Flue Workflow|桌面壳|长篇工程|Artifact 导入与对比|Artifact 真实导入向导|导入两个 Artifact/.test(section.querySelector('h2')?.textContent ?? '') },
+        library: { selector: '.grid > section', predicate: (section) => /导入项目库 Bundle|本地项目库|项目目录索引|Artifact Library|V32 Artifact Import|V30 Longform Project|V30 Collaboration|V30 Publishing|V30 Desktop File|V33 Web Product|V34 Product Closure|V35-V40/.test(section.querySelector('h2')?.textContent ?? '') },
+        quality: { selector: '.grid > section', predicate: (section) => /伏笔回收评分|续写质量|V30 Quality|V30 Narrative|V32 Web-first|V32 TUI|CLI\/Web\/TUI|TUI 模式预览/.test(section.querySelector('h2')?.textContent ?? '') },
+        hub: { selector: '.grid > section', predicate: (section) => /V30|V32|V33|V34|V35|Flue|Provider|桌面壳|长篇工程|Narrative|Agent Studio|Collaboration|Publishing|Product Closure|Execution Suite/.test(section.querySelector('h2')?.textContent ?? '') },
+        help: { selector: null, predicate: () => false },
+      };
+
+      function buildWebNavigationView() {
+        return [
+          { id: 'dashboard', label: '总控台', hint: '最近项目 + 健康指标', shortcut: 'g d' },
+          { id: 'create', label: '新建', hint: '主题 / 续写 / 伏笔', shortcut: 'g n' },
+          { id: 'library', label: '项目库', hint: '导入 / 版本 / 标签', shortcut: 'g l' },
+          { id: 'quality', label: '质量', hint: '角色 / 伏笔 / 文风', shortcut: 'g q' },
+          { id: 'hub', label: '全方向', hint: '总控 + 长篇 OS + Agent', shortcut: 'g h' },
+          { id: 'help', label: '帮助', hint: '快捷键 + 导航', shortcut: '?' },
+        ];
+      }
+
+      function buildWebOnboardingView() {
+        return [
+          { step: 1, title: '从主题开始', body: '在「新建」页输入主题（如「月球图书馆的守夜人」），生成 artifact 草案。', cta: { label: '打开新建', view: 'create' }, cli: 'novel-ma new "月球图书馆的守夜人" --chapters 3 --words 900' },
+          { step: 2, title: '继续已有章节', body: '粘贴章节正文，自动识别「第 X 章」，生成续写上下文 + 角色 / 伏笔 / 文风指纹。', cta: { label: '打开续写', view: 'create' }, cli: 'novel-ma continue <file> --words 900' },
+          { step: 3, title: '查看总控台', body: '总控台汇总：真数据写作闭环、本地持久化、Provider smoke、Pages 验收、长篇 OS、多 Agent 流水线。', cta: { label: '打开总控台', view: 'hub' }, cli: 'novel-ma mode-parity' },
+        ];
+      }
+
+      function buildWebHelpView() {
+        return [
+          { shortcut: 'g d', label: '跳转到总控台', view: 'dashboard' },
+          { shortcut: 'g n', label: '跳转到新建', view: 'create' },
+          { shortcut: 'g l', label: '跳转到项目库', view: 'library' },
+          { shortcut: 'g q', label: '跳转到质量', view: 'quality' },
+          { shortcut: 'g h', label: '跳转全方向', view: 'hub' },
+          { shortcut: '?', label: '显示 / 隐藏帮助浮层' },
+          { shortcut: 'Esc', label: '关闭弹层 / 返回总控台' },
+          { shortcut: 'Ctrl+S', label: '保存当前 artifact 到项目库' },
+          { shortcut: 'Ctrl+E', label: '打开章节编辑器（Focus Mode）' },
+          { shortcut: 'Ctrl+Shift+D', label: '切换主题（light/dark/sepia/nord）' },
+        ];
+      }
+
+      const ONBOARDING_KEY = 'novel-ma:onboarding-dismissed';
+
+      let activeView = 'dashboard';
+
+      function renderWebNavigation(activeId) {
+        const nav = document.getElementById('web-nav-tabs');
+        nav.innerHTML = '';
+        for (const tab of buildWebNavigationView()) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = `${tab.label} (${tab.shortcut})`;
+          btn.title = tab.hint;
+          btn.dataset.view = tab.id;
+          btn.setAttribute('aria-current', tab.id === activeId ? 'true' : 'false');
+          btn.onclick = () => switchView(tab.id);
+          nav.appendChild(btn);
+        }
+      }
+
+      function renderWebOnboarding() {
+        const body = document.getElementById('web-onboarding-body');
+        body.innerHTML = '';
+        for (const step of buildWebOnboardingView()) {
+          const row = document.createElement('div');
+          row.className = 'step';
+          const num = document.createElement('span');
+          num.className = 'num';
+          num.textContent = String(step.step);
+          const text = document.createElement('div');
+          text.innerHTML = `<strong>${step.title}</strong><div class="hint">${step.body}</div><code>${step.cli}</code><div style="margin-top:8px"><button type="button" class="secondary" data-jump="${step.cta.view}">${step.cta.label}</button></div>`;
+          row.append(num, text);
+          body.appendChild(row);
+        }
+        body.querySelectorAll('button[data-jump]').forEach((btn) => {
+          btn.onclick = () => { switchView(btn.dataset.jump); closeOverlay('web-onboarding'); };
+        });
+      }
+
+      function renderWebHelp() {
+        const body = document.getElementById('web-help-body');
+        body.innerHTML = '';
+        const table = document.createElement('table');
+        table.innerHTML = '<thead><tr><th>快捷键</th><th>动作</th></tr></thead>';
+        const tbody = document.createElement('tbody');
+        for (const entry of buildWebHelpView()) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td><kbd>${entry.shortcut}</kbd></td><td>${entry.label}</td>`;
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        body.appendChild(table);
+      }
+
+      function openOverlay(id) {
+        const overlay = document.getElementById(id);
+        if (!overlay) return;
+        overlay.dataset.open = 'true';
+        overlay.removeAttribute('hidden');
+      }
+
+      function closeOverlay(id) {
+        const overlay = document.getElementById(id);
+        if (!overlay) return;
+        overlay.dataset.open = 'false';
+        overlay.setAttribute('hidden', '');
+      }
+
+      function switchView(viewId) {
+        activeView = viewId;
+        renderWebNavigation(viewId);
+        if (viewId === 'help') { renderWebHelp(); openOverlay('web-help'); return; }
+        if (viewId === 'dashboard') { document.querySelectorAll('.grid > section').forEach((s) => s.hidden = false); return; }
+        const group = VIEW_GROUPS[viewId];
+        if (!group) return;
+        document.querySelectorAll('.grid > section').forEach((section) => {
+          section.hidden = !group.predicate(section);
+        });
+      }
+
+      function bindWebNavigation() {
+        renderWebNavigation(activeView);
+        renderWebOnboarding();
+        renderWebHelp();
+        const dismissed = localStorage.getItem(ONBOARDING_KEY);
+        if (!dismissed) openOverlay('web-onboarding');
+        document.getElementById('web-onboarding-close').onclick = () => { localStorage.setItem(ONBOARDING_KEY, '1'); closeOverlay('web-onboarding'); };
+        document.getElementById('web-help-close').onclick = () => closeOverlay('web-help');
+        document.getElementById('open-help').onclick = () => { renderWebHelp(); openOverlay('web-help'); };
+      }
+
+      let pendingShortcut = null;
+      function bindWebShortcuts() {
+        document.addEventListener('keydown', (event) => {
+          if (event.target.matches('input, textarea, select')) return;
+          if (event.key === '?') { renderWebHelp(); openOverlay('web-help'); event.preventDefault(); return; }
+          if (event.key === 'Escape') {
+            ['web-help', 'web-onboarding'].forEach((id) => closeOverlay(id));
+            return;
+          }
+          if (pendingShortcut === 'g') {
+            const map = { d: 'dashboard', n: 'create', l: 'library', q: 'quality', h: 'hub' };
+            if (map[event.key]) { switchView(map[event.key]); pendingShortcut = null; event.preventDefault(); return; }
+          }
+          if (event.key === 'g') { pendingShortcut = 'g'; setTimeout(() => { pendingShortcut = null; }, 800); }
+        }, { passive: false });
+      }
+
+      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -838,6 +1031,8 @@
         URL.revokeObjectURL(url);
       };
       renderLibrary();
+      bindWebNavigation();
+      bindWebShortcuts();
     </script>
   </body>
 </html>
