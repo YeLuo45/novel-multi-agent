@@ -45,6 +45,8 @@ import {
   assessOfflineCapability,
   buildPipelineTimelineSvg,
   buildAgentTraceView,
+  parseArtifactIndex,
+  planArtifactSync,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -713,5 +715,37 @@ describe('web-first studio models', () => {
     assert.deepEqual(view.artifactKeys, ['draft', 'memory']);
     assert.ok(view.outputExcerpt.includes('银匙'));
     assert.equal(view.startedAt, '2026-06-27T00:00:00.000Z');
+  });
+
+  it('parses V50 artifact index with valid files imported and broken files into issues', () => {
+    const files = [
+      { path: '.novel-ma/projects/moon-1/artifact.json', json: JSON.stringify(sampleArtifacts[0]) },
+      { path: '.novel-ma/projects/moon-2/artifact.json', json: JSON.stringify(sampleArtifacts[1]) },
+      { path: '.novel-ma/projects/bad/artifact.json', json: '{broken' },
+      { path: '.novel-ma/projects/empty/artifact.json', json: '{}' },
+    ];
+    const result = parseArtifactIndex(files);
+    assert.equal(result.items.length, 2);
+    assert.equal(result.issues.length, 2);
+    assert.ok(result.issues.some((issue) => issue.reason.startsWith('json')));
+    assert.ok(result.issues.some((issue) => issue.reason === 'missing projectId'));
+  });
+
+  it('plans V50 artifact sync with accept modes reject stages max bytes and by-mode breakdown', () => {
+    const files = [
+      { path: 'a.json', json: JSON.stringify(sampleArtifacts[0]) },
+      { path: 'b.json', json: JSON.stringify(sampleArtifacts[1]) },
+      { path: 'c.json', json: '{bad' },
+    ];
+    const plan = planArtifactSync(files, { acceptModes: ['theme'], maxBytes: 1024 * 1024 });
+    assert.equal(plan.scannedFiles, 3);
+    assert.equal(plan.importedCount, 1);
+    assert.equal(plan.issuesCount, 2);
+    assert.equal(plan.byMode.theme ?? 0, 1);
+    assert.ok(plan.oldestSavedAt);
+    assert.ok(plan.newestSavedAt);
+
+    const noFilter = planArtifactSync(files);
+    assert.ok(noFilter.importedCount >= 1);
   });
 });

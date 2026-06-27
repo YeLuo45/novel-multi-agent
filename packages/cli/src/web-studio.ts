@@ -427,6 +427,102 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface ArtifactSyncReport {
+  scannedFiles: number;
+  importedCount: number;
+  issuesCount: number;
+  byMode: Record<string, number>;
+  byStage: Record<string, number>;
+  oldestSavedAt: string | null;
+  newestSavedAt: string | null;
+}
+
+export interface ArtifactSyncIssue {
+  path: string;
+  reason: string;
+  preview?: string;
+}
+
+export interface ArtifactSyncOptions {
+  acceptModes?: string[];
+  rejectStages?: string[];
+  maxBytes?: number;
+}
+
+function safeParseArtifactJson(raw: string): { ok: boolean; artifact: StudioArtifact | null; reason?: string } {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return { ok: false, artifact: null, reason: 'non-object' };
+    if (!parsed.projectId) return { ok: false, artifact: null, reason: 'missing projectId' };
+    return { ok: true, artifact: parsed as StudioArtifact };
+  } catch (error) {
+    return { ok: false, artifact: null, reason: `json: ${(error as Error).message}` };
+  }
+}
+
+export function parseArtifactIndex(files: Array<{ path: string; json: string }>): { items: StudioArtifact[]; issues: ArtifactSyncIssue[] } {
+  const items: StudioArtifact[] = [];
+  const issues: ArtifactSyncIssue[] = [];
+  for (const file of files) {
+    const result = safeParseArtifactJson(file.json);
+    if (!result.ok || !result.artifact) {
+      issues.push({ path: file.path, reason: result.reason ?? 'unknown', preview: file.json.slice(0, 60) });
+      continue;
+    }
+    items.push(result.artifact);
+  }
+  return { items, issues };
+}
+
+export function planArtifactSync(files: Array<{ path: string; json: string }>, options: ArtifactSyncOptions = {}): ArtifactSyncReport {
+  const acceptModes = new Set(options.acceptModes ?? []);
+  const rejectStages = new Set(options.rejectStages ?? []);
+  const maxBytes = options.maxBytes ?? 5 * 1024 * 1024;
+  const issues: ArtifactSyncIssue[] = [];
+  const items: StudioArtifact[] = [];
+  let totalBytes = 0;
+  for (const file of files) {
+    totalBytes += file.json.length;
+    if (file.json.length > maxBytes) {
+      issues.push({ path: file.path, reason: 'exceeds maxBytes' });
+      continue;
+    }
+    const parsed = safeParseArtifactJson(file.json);
+    if (!parsed.ok || !parsed.artifact) {
+      issues.push({ path: file.path, reason: parsed.reason ?? 'unknown' });
+      continue;
+    }
+    if (acceptModes.size && parsed.artifact.mode && !acceptModes.has(parsed.artifact.mode)) {
+      issues.push({ path: file.path, reason: `mode ${parsed.artifact.mode} not accepted` });
+      continue;
+    }
+    if (rejectStages.size && parsed.artifact.stage && rejectStages.has(parsed.artifact.stage)) {
+      issues.push({ path: file.path, reason: `stage ${parsed.artifact.stage} rejected` });
+      continue;
+    }
+    items.push(parsed.artifact);
+  }
+  const byMode: Record<string, number> = {};
+  const byStage: Record<string, number> = {};
+  const savedDates: string[] = [];
+  for (const item of items) {
+    if (item.mode) byMode[item.mode] = (byMode[item.mode] ?? 0) + 1;
+    if (item.stage) byStage[item.stage] = (byStage[item.stage] ?? 0) + 1;
+    const date = (item as { savedAt?: string }).savedAt ?? item.updatedAt;
+    if (date) savedDates.push(date);
+  }
+  savedDates.sort();
+  return {
+    scannedFiles: files.length,
+    importedCount: items.length,
+    issuesCount: issues.length,
+    byMode,
+    byStage,
+    oldestSavedAt: savedDates[0] ?? null,
+    newestSavedAt: savedDates[savedDates.length - 1] ?? null,
+  };
+}
+
 export interface PipelineStep {
   role: 'planner' | 'worldbuilder' | 'writer' | 'editor' | 'continuity' | 'test' | string;
   label: string;

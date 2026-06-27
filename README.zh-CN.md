@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V50 Web CLI 项目同步（File API + parseArtifactIndex + planArtifactSync）
+
+- `parseArtifactIndex(files)`：批量解析 `{path, json}[]`，坏 JSON 进 `issues`（reason: `json: ...`），缺少 `projectId` 也进 issues；正常 artifact 进 `items`。
+- `planArtifactSync(files, options)`：在 parseArtifactIndex 基础上加 acceptModes 白名单 + rejectStages 黑名单 + maxBytes 软上限；返回 scannedFiles/importedCount/issuesCount/byMode/byStage/oldestSavedAt/newestSavedAt。
+- HTML 集成：textarea 支持 JSON 数组或 `path|json` 行格式，2 个 inline 按钮（解析 + 同步计划），复用 `.diff-summary` + `.list` 风格。
+- vm sandbox 兼容：2 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V49 Web Agent Pipeline 时间线 + Trace 视图
 
 - `buildPipelineTimelineSvg(steps)`：横向 Gantt SVG，6 个角色（planner/worldbuilder/writer/editor/continuity/test），按 `durationMs/maxDuration` 归一化 bar 宽度，按 status 着色（pending 灰/running 蓝/done 绿/failed 红/skipped 灰）。
