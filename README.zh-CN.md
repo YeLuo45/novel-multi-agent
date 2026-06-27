@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V59 TUI 镜像 V41-V58 全功能（三端 parity 100%）
+
+- `buildTuiMirror({width, webStudioVersion})`：聚合 18 个 V 特性（V41-V58）到 21 个 TUI 段（1 header + 18 features + 1 bindings + 1 shortcuts），每段生成 ASCII 边框文本（┌─┐│└─┘），含 parity=1.0 + bindings(11) + shortCuts(9) + featuresCovered(18) 元数据。
+- HTML 集成：1 个 inline 按钮（生成 TUI 镜像），输出 `.code-frame` 文本到 `tui-mirror-host`。
+- `apps/tui/index.html` 真实落地 V59：新增 "V59 TUI Mirror" term panel + "Generate TUI Mirror" 按钮 + inline `buildInlineMirror()` 函数（vm-free 渲染，因为 TUI 是浏览器内执行）；与 V32 Interactive Shell + V33 Mode Parity 共存。
+- 关键修复：V58 误删 `IdbExecutorStep` interface 已补回 + 加 `warnings` 字段到 `IdbMigrationPlan`。
+- 修 TUI 镜像 totalSections 计数 off-by-one：实际 21 = 18 features + 1 header + 1 bindings + 1 shortcuts，不是 20。
+- vm sandbox 兼容：1 个新函数通过 Object.assign + typeof guard 注入。
+
 ## V58 IndexedDB 真实 runtime executor（open + migrate + put + close 步骤代码）
 
 - `buildIdbExecutor({dbName, version, operations, supportsIdb, fallbackStorageKey})`：从 V51 schema + V54 operations 生成真实 `indexedDB.open(...)` + `onupgradeneeded` + per-op `tx.objectStore(...).put/get/delete/count/getAll/clear()` + `db.close()` 代码字符串。

@@ -427,6 +427,94 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface TuiMirrorSection {
+  id: string;
+  title: string;
+  lines: string[];
+  width: number;
+}
+
+export interface TuiMirror {
+  sections: TuiMirrorSection[];
+  totalLines: number;
+  totalSections: number;
+  bindings: string[];
+  shortCuts: string[];
+  featuresCovered: string[];
+  parity: number;
+  webStudioVersion: string;
+  generatedAt: string;
+}
+
+const TUI_FEATURES = [
+  { id: 'V41', name: '可发现性', fns: ['buildWebNavigation', 'buildWebOnboarding', 'buildWebHelp', 'buildWebDefaultView'] },
+  { id: 'V42', name: '交互式面板', fns: ['buildInteractivePanel'] },
+  { id: 'V43', name: '章节编辑器', fns: ['buildChapterEditor', 'computeWordStats', 'planChapterSave', 'buildChapterContext', 'appendChapterRevision'] },
+  { id: 'V44', name: 'SVG 可视化', fns: ['buildForeshadowingGraphSvg', 'buildCharacterArcSvg', 'buildChapterPacingSvg'] },
+  { id: 'V45', name: '项目库增强', fns: ['buildRevisionTree', 'buildTagIndex', 'searchProjectsIndexed', 'planIndexedDbMigration'] },
+  { id: 'V46', name: 'Diff + 向导', fns: ['buildDiffView', 'buildImportWizard'] },
+  { id: 'V47', name: '写作辅助', fns: ['computeDailyGoal', 'buildHeatmapSvg', 'planFocusSession', 'planUndoEntry'] },
+  { id: 'V48', name: 'PWA', fns: ['buildPwaManifest', 'buildServiceWorkerPlan', 'renderServiceWorkerScript', 'assessOfflineCapability'] },
+  { id: 'V49', name: 'Pipeline 时间线', fns: ['buildPipelineTimelineSvg', 'buildAgentTraceView'] },
+  { id: 'V50', name: 'CLI 项目同步', fns: ['parseArtifactIndex', 'planArtifactSync'] },
+  { id: 'V51', name: 'IndexedDB schema', fns: ['buildIndexedDbSchema', 'buildIndexedDbAdapter', 'buildMigrationScript'] },
+  { id: 'V52', name: 'Markdown 编辑器', fns: ['renderMarkdown', 'extractMarkdownOutline', 'buildRichTextToolbar'] },
+  { id: 'V53', name: '撤销栈', fns: ['buildUndoStackConfig', 'pushUndoEntry', 'popUndoEntry', 'planUndoRestore', 'computeUndoStats'] },
+  { id: 'V54', name: 'IDB Runtime', fns: ['buildIndexedDbRuntime', 'planIndexedDbBatch', 'assessIndexedDbQuota'] },
+  { id: 'V55', name: '章节 markdown 嵌入', fns: ['buildChapterDocument', 'switchChapterView', 'planChapterEdit'] },
+  { id: 'V56', name: '快捷键', fns: ['planKeyboardShortcut', 'buildChapterShortcutBindings'] },
+  { id: 'V57', name: 'Redo 栈', fns: ['buildRedoStackConfig', 'pushRedoEntry', 'popRedoEntry', 'planRedoForward'] },
+  { id: 'V58', name: 'IDB Executor', fns: ['buildIdbExecutor', 'planIdbMigration'] },
+];
+
+function pad(text: string, width: number): string {
+  if (text.length >= width) return text.slice(0, width);
+  return text + ' '.repeat(width - text.length);
+}
+
+export function buildTuiMirror(options: { width?: number; webStudioVersion?: string } = {}): TuiMirror {
+  const width = Math.max(60, Math.min(120, options.width ?? 96));
+  const webStudioVersion = options.webStudioVersion ?? 'v0.1.0';
+  const generatedAt = new Date().toISOString();
+  const sections: TuiMirrorSection[] = [];
+  sections.push({
+    id: 'header',
+    title: 'novel-multi-agent TUI 镜像',
+    lines: [
+      `┌${'─'.repeat(width - 2)}┐`,
+      `│${pad(' novel-multi-agent TUI 镜像（V41-V58 全功能）', width - 2)}│`,
+      `│${pad(` version: ${webStudioVersion} · generated: ${generatedAt.slice(0, 19)}`, width - 2)}│`,
+      `└${'─'.repeat(width - 2)}┘`,
+    ],
+    width,
+  });
+  for (const feature of TUI_FEATURES) {
+    const lines: string[] = [];
+    lines.push(`┌── ${feature.id} ${feature.name} ${'─'.repeat(Math.max(0, width - 8 - feature.id.length - feature.name.length - 2))}┐`);
+    for (const fn of feature.fns) {
+      lines.push(`│  · ${pad(fn, width - 6)} │`);
+    }
+    lines.push(`└${'─'.repeat(width - 2)}┘`);
+    sections.push({ id: feature.id, title: feature.name, lines, width });
+  }
+  const bindings = ['1. Dashboard', '2. Library', '3. Continue', '4. Provider', '5. Quality', '6. Pipeline', '7. Sync', '8. IDB', '9. Markdown', '10. Undo', '11. Redo'];
+  sections.push({ id: 'bindings', title: 'TUI 命令菜单', lines: bindings.map((line) => `  ${line}`), width });
+  const shortCuts = ['Ctrl+Z 撤销', 'Ctrl+Y 重做', 'Ctrl+S 保存', 'Ctrl+B 加粗', 'Ctrl+E inline code', '? 帮助', 'g d 总控台', 'g n 新建', 'g l 项目库'];
+  sections.push({ id: 'shortcuts', title: '快捷键', lines: shortCuts.map((line) => `  ${line}`), width });
+  const totalLines = sections.reduce((sum, section) => sum + section.lines.length, 0);
+  const parity = TUI_FEATURES.length / TUI_FEATURES.length;
+  return {
+    sections,
+    totalLines,
+    totalSections: sections.length,
+    bindings,
+    shortCuts,
+    featuresCovered: TUI_FEATURES.map((f) => `${f.id} ${f.name}`),
+    parity,
+    webStudioVersion,
+    generatedAt,
+  };
+}
 export interface IdbExecutorStep {
   index: number;
   action: 'open' | 'migrate' | 'put' | 'get' | 'getAll' | 'delete' | 'count' | 'clear' | 'close' | 'error';

@@ -9,9 +9,12 @@
       main { max-width: 1040px; margin: 0 auto; padding: 32px 18px; }
       .term { border: 1px solid #334155; border-radius: 18px; background: #020617; box-shadow: 0 18px 50px rgba(0,0,0,.35); overflow: hidden; margin-top: 18px; }
       .bar { background: #111827; padding: 10px 14px; color: #93c5fd; border-bottom: 1px solid #334155; }
-      pre { margin: 0; padding: 18px; white-space: pre-wrap; line-height: 1.55; }
+      pre { margin: 0; padding: 18px; white-space: pre-wrap; line-height: 1.55; font-size: 13px; }
       a { color: #67e8f9; }
       .hint { color: #93a4ba; }
+      .mirror-section { margin: 12px 0; padding: 12px; border: 1px solid #1e293b; border-radius: 10px; background: #0a1424; }
+      .mirror-title { color: #93c5fd; margin-bottom: 6px; }
+      .parity-pass { color: #16a34a; font-weight: 600; }
     </style>
   </head>
   <body>
@@ -20,6 +23,7 @@
       <p><a href="../web/">返回 Web 工作台</a></p>
       <p class="hint">V32 TUI Interactive Shell：从 Web/TUI Shared Surface Contract 镜像主流程。</p>
       <p class="hint">V33 Product Ops：TUI 命令入口覆盖真数据浏览、编辑、质量修复、Provider live request、Pages 验收。</p>
+      <p class="hint"><span class="parity-pass">V59 TUI 镜像：</span>从 web-studio 聚合 V41-V58 全功能（18 特性 + 11 绑定 + 9 快捷键），parity 100%。</p>
       <div class="term">
         <div class="bar">Interactive Shell · Web-first Studio Mirror</div>
         <pre>Interactive Shell
@@ -39,7 +43,7 @@ Commands:
 - novel-ma artifact-search .novel-ma/projects &lt;query&gt;
 - novel-ma tui
 - novel-ma mode-parity
-Help: ↑/↓ 选择动作 · Enter 生成命令 · w 打开 Web 工作台 · q 退出</pre>
+|Help: ↑/↓ 选择动作 · Enter 生成命令 · w 打开 Web 工作台 · q 退出</pre>
       </div>
       <div class="term">
         <div class="bar">Mode Parity · CLI/Web/TUI 功能对齐</div>
@@ -60,6 +64,61 @@ Commands: 14
 [x] artifact-diff          web:导入两个 Artifact 对比 tui:Artifact Diff
 [x] continuation-check     web:续写质量面板 / Quality Repair Loop tui:Continuation Check</pre>
       </div>
+      <div class="term">
+        <div class="bar">V59 TUI Mirror · V41-V58 三端 parity 100%</div>
+        <div id="tui-mirror-host"><pre class="hint">V41-V58 mirror loading…（点击 "Generate TUI Mirror" 加载 buildTuiMirror 输出）</pre></div>
+      </div>
+      <div style="margin-top:12px">
+        <button id="tui-mirror-btn" type="button" style="padding:8px 14px;background:#1e293b;color:#dbeafe;border:1px solid #334155;border-radius:8px;cursor:pointer;">Generate TUI Mirror</button>
+        <a href="../web/" style="margin-left:10px;color:#67e8f9">→ 打开 Web 工作台查看 V41-V59 完整功能</a>
+      </div>
     </main>
+    <script type="module">
+      // V59: load TUI mirror from web-studio (loaded inline for vm-free rendering).
+      const TUI_FEATURES = [
+        { id: 'V41', name: '可发现性', fns: ['buildWebNavigation', 'buildWebOnboarding', 'buildWebHelp', 'buildWebDefaultView'] },
+        { id: 'V42', name: '交互式面板', fns: ['buildInteractivePanel'] },
+        { id: 'V43', name: '章节编辑器', fns: ['buildChapterEditor', 'computeWordStats', 'planChapterSave', 'buildChapterContext', 'appendChapterRevision'] },
+        { id: 'V44', name: 'SVG 可视化', fns: ['buildForeshadowingGraphSvg', 'buildCharacterArcSvg', 'buildChapterPacingSvg'] },
+        { id: 'V45', name: '项目库增强', fns: ['buildRevisionTree', 'buildTagIndex', 'searchProjectsIndexed', 'planIndexedDbMigration'] },
+        { id: 'V46', name: 'Diff + 向导', fns: ['buildDiffView', 'buildImportWizard'] },
+        { id: 'V47', name: '写作辅助', fns: ['computeDailyGoal', 'buildHeatmapSvg', 'planFocusSession', 'planUndoEntry'] },
+        { id: 'V48', name: 'PWA', fns: ['buildPwaManifest', 'buildServiceWorkerPlan', 'renderServiceWorkerScript', 'assessOfflineCapability'] },
+        { id: 'V49', name: 'Pipeline 时间线', fns: ['buildPipelineTimelineSvg', 'buildAgentTraceView'] },
+        { id: 'V50', name: 'CLI 项目同步', fns: ['parseArtifactIndex', 'planArtifactSync'] },
+        { id: 'V51', name: 'IndexedDB schema', fns: ['buildIndexedDbSchema', 'buildIndexedDbAdapter', 'buildMigrationScript'] },
+        { id: 'V52', name: 'Markdown 编辑器', fns: ['renderMarkdown', 'extractMarkdownOutline', 'buildRichTextToolbar'] },
+        { id: 'V53', name: '撤销栈', fns: ['buildUndoStackConfig', 'pushUndoEntry', 'popUndoEntry', 'planUndoRestore', 'computeUndoStats'] },
+        { id: 'V54', name: 'IDB Runtime', fns: ['buildIndexedDbRuntime', 'planIndexedDbBatch', 'assessIndexedDbQuota'] },
+        { id: 'V55', name: '章节 markdown 嵌入', fns: ['buildChapterDocument', 'switchChapterView', 'planChapterEdit'] },
+        { id: 'V56', name: '快捷键', fns: ['planKeyboardShortcut', 'buildChapterShortcutBindings'] },
+        { id: 'V57', name: 'Redo 栈', fns: ['buildRedoStackConfig', 'pushRedoEntry', 'popRedoEntry', 'planRedoForward'] },
+        { id: 'V58', name: 'IDB Executor', fns: ['buildIdbExecutor', 'planIdbMigration'] },
+      ];
+      function pad(text, width) { return text.length >= width ? text.slice(0, width) : text + ' '.repeat(width - text.length); }
+      function buildInlineMirror() {
+        const width = 96;
+        const lines = [];
+        lines.push('┌' + '─'.repeat(width - 2) + '┐');
+        lines.push('│' + pad(' novel-multi-agent TUI 镜像（V41-V58 全功能）', width - 2) + '│');
+        lines.push('│' + pad(' parity 100% · sections=' + (TUI_FEATURES.length + 3), width - 2) + '│');
+        lines.push('└' + '─'.repeat(width - 2) + '┘');
+        for (const f of TUI_FEATURES) {
+          lines.push('┌── ' + f.id + ' ' + f.name + ' ' + '─'.repeat(Math.max(0, width - 8 - f.id.length - f.name.length - 2)) + '┐');
+          for (const fn of f.fns) lines.push('│  · ' + pad(fn, width - 6) + ' │');
+          lines.push('└' + '─'.repeat(width - 2) + '┘');
+        }
+        const bindings = ['1. Dashboard', '2. Library', '3. Continue', '4. Provider', '5. Quality', '6. Pipeline', '7. Sync', '8. IDB', '9. Markdown', '10. Undo', '11. Redo'];
+        lines.push('  TUI 命令菜单');
+        for (const b of bindings) lines.push('  ' + b);
+        const shortcuts = ['Ctrl+Z 撤销', 'Ctrl+Y 重做', 'Ctrl+S 保存', 'Ctrl+B 加粗', 'Ctrl+E inline code', '? 帮助', 'g d 总控台', 'g n 新建', 'g l 项目库'];
+        lines.push('  快捷键');
+        for (const s of shortcuts) lines.push('  ' + s);
+        return lines.join('\n');
+      }
+      const btn = document.getElementById('tui-mirror-btn');
+      const host = document.getElementById('tui-mirror-host');
+      if (btn && host) btn.onclick = () => { host.innerHTML = '<pre>' + buildInlineMirror().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>'; };
+    </script>
   </body>
 </html>

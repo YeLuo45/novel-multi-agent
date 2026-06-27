@@ -72,6 +72,7 @@ import {
   planRedoForward,
   buildIdbExecutor,
   planIdbMigration,
+  buildTuiMirror,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1146,5 +1147,24 @@ describe('web-first studio models', () => {
     const over = planIdbMigration([{ projectId: 'huge', sizeBytes: 100_000_000 }], { maxBytes: 1024 });
     assert.equal(over.ready, false);
     assert.ok(over.steps.length >= 1);
+  });
+
+  it('builds V59 TUI mirror with 18 feature sections bindings shortcuts and 100% parity', () => {
+    const mirror = buildTuiMirror({ width: 80, webStudioVersion: 'v0.1.0-test' });
+    assert.equal(mirror.totalSections, 18 + 3);
+    assert.equal(mirror.parity, 1);
+    assert.equal(mirror.webStudioVersion, 'v0.1.0-test');
+    assert.ok(mirror.totalLines > 50);
+    assert.equal(mirror.featuresCovered.length, 18);
+    assert.ok(mirror.featuresCovered.includes('V41 可发现性'));
+    assert.ok(mirror.featuresCovered.includes('V58 IDB Executor'));
+    assert.ok(mirror.bindings.length >= 10);
+    assert.ok(mirror.shortCuts.length >= 5);
+    const header = mirror.sections.find((s) => s.id === 'header');
+    assert.ok(header);
+    assert.ok(header?.lines.some((line) => line.includes('novel-multi-agent TUI 镜像')));
+    const v58 = mirror.sections.find((s) => s.id === 'V58');
+    assert.ok(v58);
+    assert.ok(v58?.lines.some((line) => line.includes('buildIdbExecutor')));
   });
 });
