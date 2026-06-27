@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V53 Web 撤销栈真持久化（localStorage 栈 + 跨刷新 + 栈统计）
+
+- `buildUndoStackConfig()`：storageKey `novel-ma:undo` / maxSize 50（clamp 1-500）/ ttlMs 7 天（clamp ≥60s）/ persistAcrossReload true。
+- `pushUndoEntry(stack, entry, now)`：TTL 过滤过期 entry + FIFO trim 保留最后 maxSize 条；返回新 stack + 更新 totalPushed/oldestEntryId/newestEntryId。
+- `popUndoEntry(stack)`：返回 `{stack, entry}`，栈空时 entry=null；totalPopped 累加。
+- `planUndoRestore(stack, entryId)`：返回 `{entryId, projectId, label, beforeJson, afterJson, deltaFieldCount, steps[4], ready}`；entry 不存在时 ready=false + steps=['entry not found']。
+- `computeUndoStats(stack, now)`：返回 `{count, maxSize, storageBytes, oldestAge, averageInterval, ttlMs}`。
+- HTML 集成：3 个 inline 按钮（push/pop/stats）+ 真实 localStorage 持久化（`novel-ma:undo` key）+ loadUndoStack/saveUndoStack 辅助函数 + `planUndoEntry` 复用 V47 的 entry 生成。
+
 ## V52 Web Markdown 富文本编辑器（零依赖渲染 + 工具栏 + 大纲）
 
 - `renderMarkdown(text, options)`：~80 行自实现 markdown 渲染器，支持 # 标题 / **粗体** / *斜体* / `inline code` / `- list` / ``` codeblock ``` / `[text](url)` 链接；支持 `maxHeadingLevel` clamp + `breaks` + `allowHtml` 选项；返回 html + sections[] + counts（headings/paragraphs/codeBlocks/links）。

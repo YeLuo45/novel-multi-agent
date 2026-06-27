@@ -53,6 +53,11 @@ import {
   renderMarkdown,
   extractMarkdownOutline,
   buildRichTextToolbar,
+  buildUndoStackConfig,
+  pushUndoEntry,
+  popUndoEntry,
+  planUndoRestore,
+  computeUndoStats,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -845,5 +850,71 @@ describe('web-first studio models', () => {
     assert.ok(toolbar.some((action) => action.id === 'h1' && action.before === '# '));
     assert.ok(toolbar.some((action) => action.id === 'link' && action.after.includes('https://')));
     assert.ok(toolbar.every((action) => action.label && action.shortcut && action.before !== undefined && action.after !== undefined));
+  });
+
+  it('builds V53 undo stack config with defaults storage key max size ttl and persistence flag', () => {
+    const config = buildUndoStackConfig();
+    assert.equal(config.storageKey, 'novel-ma:undo');
+    assert.ok(config.maxSize >= 1 && config.maxSize <= 500);
+    assert.ok(config.ttlMs >= 60_000);
+    assert.equal(config.persistAcrossReload, true);
+    const custom = buildUndoStackConfig({ maxSize: 200, ttlMs: 1000 * 60 * 60 });
+    assert.equal(custom.maxSize, 200);
+  });
+
+  it('pushes V53 undo entry with ttl filter and FIFO trim respecting max size', () => {
+    const config = buildUndoStackConfig({ maxSize: 3 });
+    let stack: UndoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, oldestEntryId: null, newestEntryId: null };
+    for (let i = 0; i < 5; i += 1) stack = pushUndoEntry(stack, { id: `e-${i}`, createdAt: new Date(Date.now() - i).toISOString(), before: {}, after: {}, label: `edit ${i}` });
+    assert.equal(stack.entries.length, 3);
+    assert.equal(stack.entries[0]?.id, 'e-2');
+    assert.equal(stack.entries[2]?.id, 'e-4');
+    assert.equal(stack.totalPushed, 5);
+  });
+
+  it('pops V53 undo entry with stack state update and empty stack safety', () => {
+    const config = buildUndoStackConfig();
+    let stack: UndoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, oldestEntryId: null, newestEntryId: null };
+    stack = pushUndoEntry(stack, { id: 'e-1', createdAt: new Date().toISOString(), before: {}, after: {}, label: 'edit' });
+    const popped = popUndoEntry(stack);
+    assert.ok(popped.entry);
+    assert.equal(popped.entry?.id, 'e-1');
+    assert.equal(popped.stack.entries.length, 0);
+    assert.equal(popped.stack.totalPopped, 1);
+    const empty = popUndoEntry(popped.stack);
+    assert.equal(empty.entry, null);
+  });
+
+  it('plans V53 undo restore with steps delta field count and not-found fallback', () => {
+    const config = buildUndoStackConfig();
+    let stack: UndoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, oldestEntryId: null, newestEntryId: null };
+    stack = pushUndoEntry(stack, { id: 'e-1', createdAt: new Date().toISOString(), before: { title: 'old' }, after: { title: 'new', body: '林澈推开门' }, label: 'rename chapter' });
+    const plan = planUndoRestore(stack, 'e-1');
+    assert.equal(plan.entryId, 'e-1');
+    assert.equal(plan.label, 'rename chapter');
+    assert.equal(plan.deltaFieldCount, 2);
+    assert.ok(plan.beforeJson.includes('"title": "old"'));
+    assert.ok(plan.afterJson.includes('"title": "new"'));
+    assert.ok(plan.ready);
+    assert.ok(plan.steps.length >= 3);
+
+    const missing = planUndoRestore(stack, 'e-zzz');
+    assert.equal(missing.ready, false);
+    assert.equal(missing.deltaFieldCount, 0);
+  });
+
+  it('computes V53 undo stats with count storage bytes oldest age average interval and ttl', () => {
+    const config = buildUndoStackConfig({ maxSize: 10 });
+    let stack: UndoStack = { config, entries: [], totalPushed: 0, totalPopped: 0, oldestEntryId: null, newestEntryId: null };
+    const now = Date.now();
+    stack = pushUndoEntry(stack, { id: 'e-1', createdAt: new Date(now - 60_000).toISOString(), before: {}, after: {}, label: 'a' }, now);
+    stack = pushUndoEntry(stack, { id: 'e-2', createdAt: new Date(now - 30_000).toISOString(), before: {}, after: {}, label: 'b' }, now);
+    const stats = computeUndoStats(stack, now);
+    assert.equal(stats.count, 2);
+    assert.equal(stats.maxSize, 10);
+    assert.ok(stats.storageBytes > 0);
+    assert.ok(stats.oldestAge >= 60_000);
+    assert.ok(stats.averageInterval >= 30_000);
+    assert.equal(stats.ttlMs, config.ttlMs);
   });
 });

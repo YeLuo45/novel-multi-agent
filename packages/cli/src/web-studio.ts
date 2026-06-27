@@ -427,6 +427,117 @@ export interface ServiceWorkerPlan {
   ready: boolean;
 }
 
+export interface UndoStackConfig {
+  storageKey: string;
+  maxSize: number;
+  ttlMs: number;
+  persistAcrossReload: boolean;
+}
+
+export interface UndoStack {
+  config: UndoStackConfig;
+  entries: UndoEntry[];
+  totalPushed: number;
+  totalPopped: number;
+  oldestEntryId: string | null;
+  newestEntryId: string | null;
+}
+
+export interface UndoRestorePlan {
+  entryId: string;
+  projectId: string;
+  label: string;
+  beforeJson: string;
+  afterJson: string;
+  deltaFieldCount: number;
+  steps: string[];
+  ready: boolean;
+}
+
+export interface UndoStats {
+  count: number;
+  maxSize: number;
+  storageBytes: number;
+  oldestAge: number;
+  averageInterval: number;
+  ttlMs: number;
+}
+
+export function buildUndoStackConfig(options: { storageKey?: string; maxSize?: number; ttlMs?: number; persistAcrossReload?: boolean } = {}): UndoStackConfig {
+  return {
+    storageKey: options.storageKey ?? 'novel-ma:undo',
+    maxSize: Math.max(1, Math.min(500, options.maxSize ?? 50)),
+    ttlMs: Math.max(60_000, options.ttlMs ?? 7 * 24 * 60 * 60 * 1000),
+    persistAcrossReload: options.persistAcrossReload ?? true,
+  };
+}
+
+export function pushUndoEntry(stack: UndoStack, entry: UndoEntry, now: number = Date.now()): UndoStack {
+  const filtered = stack.entries.filter((existing) => now - new Date(existing.createdAt).getTime() < stack.config.ttlMs);
+  const next: UndoEntry[] = [...filtered, entry].slice(-stack.config.maxSize);
+  return {
+    config: stack.config,
+    entries: next,
+    totalPushed: stack.totalPushed + 1,
+    totalPopped: stack.totalPopped,
+    oldestEntryId: next[0]?.id ?? null,
+    newestEntryId: next[next.length - 1]?.id ?? null,
+  };
+}
+
+export function popUndoEntry(stack: UndoStack): { stack: UndoStack; entry: UndoEntry | null } {
+  if (stack.entries.length === 0) return { stack, entry: null };
+  const last = stack.entries[stack.entries.length - 1] ?? null;
+  if (!last) return { stack, entry: null };
+  return {
+    stack: { ...stack, entries: stack.entries.slice(0, -1), totalPopped: stack.totalPopped + 1 },
+    entry: last,
+  };
+}
+
+export function planUndoRestore(stack: UndoStack, entryId: string): UndoRestorePlan {
+  const entry = stack.entries.find((item) => item.id === entryId);
+  if (!entry) {
+    return { entryId, projectId: '', label: 'not found', beforeJson: '', afterJson: '', deltaFieldCount: 0, steps: ['entry not found'], ready: false };
+  }
+  const beforeKeys = entry.before && typeof entry.before === 'object' ? Object.keys(entry.before as Record<string, unknown>) : [];
+  const afterKeys = entry.after && typeof entry.after === 'object' ? Object.keys(entry.after as Record<string, unknown>) : [];
+  const delta = new Set([...beforeKeys, ...afterKeys]).size;
+  const steps = [
+    `读取 entry ${entry.id} 的 before 快照`,
+    `对比 current artifact 与 before 快照，列出差异字段`,
+    `应用 entry.after 到目标 artifact`,
+    `写入回 localStorage '${stack.config.storageKey}' 并刷新 history`,
+  ];
+  return {
+    entryId: entry.id,
+    projectId: (entry.after as { projectId?: string })?.projectId ?? '',
+    label: entry.label,
+    beforeJson: JSON.stringify(entry.before, null, 2),
+    afterJson: JSON.stringify(entry.after, null, 2),
+    deltaFieldCount: delta,
+    steps,
+    ready: true,
+  };
+}
+
+export function computeUndoStats(stack: UndoStack, now: number = Date.now()): UndoStats {
+  const count = stack.entries.length;
+  const oldest = stack.entries[0];
+  const newest = stack.entries[stack.entries.length - 1];
+  const oldestAge = oldest ? Math.max(0, now - new Date(oldest.createdAt).getTime()) : 0;
+  const interval = oldest && newest && count > 1 ? Math.max(0, (new Date(newest.createdAt).getTime() - new Date(oldest.createdAt).getTime()) / Math.max(1, count - 1)) : 0;
+  const storageBytes = JSON.stringify(stack.entries).length * 2;
+  return {
+    count,
+    maxSize: stack.config.maxSize,
+    storageBytes,
+    oldestAge,
+    averageInterval: interval,
+    ttlMs: stack.config.ttlMs,
+  };
+}
+
 export interface MarkdownRenderOptions {
   allowHtml?: boolean;
   maxHeadingLevel?: number;
