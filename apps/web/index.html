@@ -43,6 +43,49 @@
       .overlay-card th, .overlay-card td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
       .overlay-card kbd { background: var(--code); color: var(--code-text); padding: 2px 8px; border-radius: 6px; font-size: 12px; font-family: inherit; }
       .help-hint { color: var(--muted); font-size: 13px; }
+      .panel-view { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 22px; box-shadow: 0 12px 30px rgba(20,20,20,.08); }
+      .panel-view .panel-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+      .panel-view .panel-title { font-size: 18px; margin: 0; }
+      .panel-view .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+      .panel-view .badge[data-tone="pass"] { background: color-mix(in srgb, #16a34a 18%, transparent); color: #16a34a; }
+      .panel-view .badge[data-tone="warn"] { background: color-mix(in srgb, #d97706 18%, transparent); color: #d97706; }
+      .panel-view .badge[data-tone="fail"] { background: color-mix(in srgb, #b91c1c 18%, transparent); color: #b91c1c; }
+      .panel-view .badge[data-tone="info"] { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
+      .panel-view .section { margin-top: 18px; }
+      .panel-view .section h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
+      .panel-view .progress-row { display: flex; align-items: center; gap: 12px; }
+      .panel-view .progress-row .label { min-width: 80px; font-size: 14px; }
+      .panel-view .progress-row .track { flex: 1; height: 10px; background: var(--border); border-radius: 999px; overflow: hidden; }
+      .panel-view .progress-row .fill { height: 100%; border-radius: 999px; }
+      .panel-view .progress-row[data-tone="pass"] .fill { background: #16a34a; }
+      .panel-view .progress-row[data-tone="warn"] .fill { background: #d97706; }
+      .panel-view .progress-row[data-tone="fail"] .fill { background: #b91c1c; }
+      .panel-view .progress-row .value { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+      .panel-view .bar-row { display: grid; grid-template-columns: 100px 1fr 48px; gap: 10px; align-items: center; margin-top: 6px; }
+      .panel-view .bar-row .label { font-size: 13px; }
+      .panel-view .bar-row .track { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; }
+      .panel-view .bar-row .fill { height: 100%; border-radius: 999px; background: var(--accent-2); }
+      .panel-view .bar-row[data-tone="pass"] .fill { background: #16a34a; }
+      .panel-view .bar-row[data-tone="warn"] .fill { background: #d97706; }
+      .panel-view .bar-row[data-tone="fail"] .fill { background: #b91c1c; }
+      .panel-view .bar-row .value { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+      .panel-view ul.list { margin: 0; padding: 0; list-style: none; }
+      .panel-view ul.list li { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+      .panel-view ul.list li:last-child { border-bottom: 0; }
+      .panel-view ul.list li .label { display: inline-flex; align-items: center; gap: 8px; }
+      .panel-view ul.list li .label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      .panel-view ul.list li[data-tone="pass"] .label::before { background: #16a34a; }
+      .panel-view ul.list li[data-tone="warn"] .label::before { background: #d97706; }
+      .panel-view ul.list li[data-tone="fail"] .label::before { background: #b91c1c; }
+      .panel-view ul.list li[data-tone="info"] .label::before { background: var(--accent-2); }
+      .panel-view ul.tree { margin: 0; padding: 0; list-style: none; }
+      .panel-view ul.tree li { padding: 4px 0 4px 16px; border-left: 2px solid var(--border); font-size: 14px; }
+      .panel-view .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+      .panel-view .metric-card { background: color-mix(in srgb, var(--panel) 70%, white); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
+      .panel-view .metric-card .label { font-size: 12px; color: var(--muted); }
+      .panel-view .metric-card .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .panel-view .note { background: color-mix(in srgb, var(--panel) 70%, white); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+      .panel-view .note pre { margin: 8px 0 0; padding: 0; background: transparent; color: var(--text); min-height: 0; }
     </style>
   </head>
   <body>
@@ -942,7 +985,7 @@
         }, { passive: false });
       }
 
-      window.NovelWorkbench = { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters };
+      window.NovelWorkbench = Object.assign({}, { applyTheme, assessContinuationQuality, buildArtifact, buildArtifactImportStudio, buildAgentStudio, buildCollaborationPack, buildDesktopFileBridge, buildFlueWorkflowRunner, buildImportGuide, buildLatestCatalog, buildLongformProjectOS, buildMemoryGraph, buildModeParityMatrix, buildNarrativeAnalytics, buildProviderLiveRuntime, buildProviderReadiness, buildPublishingPipeline, buildQualityRepairLoop, buildFlueWorkflowPlan, buildDesktopShellReadiness, buildLongformConsole, buildWebTuiSurfaceContract, buildWebStudioHub, buildTuiInteractiveShell, buildRealProjectBrowser, buildWebArtifactEditor, generateQualityRewritePatch, buildTuiCommandRouter, buildProviderLiveRequest, buildPagesAcceptancePlan, buildWebProductOps, buildWorkspacePersistencePlan, buildProviderLiveSmokeResult, runPagesAcceptanceChecks, runAgentCollaborationPipeline, buildProductClosureHub, generatePagesVerifyScript, createExecutableProviderSmoke, loadRealArtifactWorkspace, runExecutableAgentPipeline, scoreLongformProjectRisks, planPersistentEditorRevision, buildExecutionSuite, buildWebNavigationView, buildWebOnboardingView, buildWebHelpView, renderInteractivePanel, switchView, openOverlay, closeOverlay, renderTuiShellPanel, compareArtifacts, compareImportedArtifacts, continueFromChapters, createFromTheme, createLibrary, exportLibraryBundle, formatDiffReport, importArtifact, importLibraryBundle, mergeLibraryBundle, normalizeArtifact, planLibraryCleanup, renderLatestCatalogPanel, renderQualityPanel, renderTuiModeParityPanel, renderWebModeParityPanel, searchLibrary, scoreForeshadowing, splitChapters }, { buildInteractivePanel: (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : () => null) });
 
       const output = document.getElementById('output');
       const download = document.getElementById('download');
@@ -956,6 +999,144 @@
         currentArtifact = artifact;
         output.textContent = JSON.stringify(artifact, null, 2);
         download.disabled = false;
+      }
+
+      function renderInteractivePanel(kind, payload) {
+        const builder = window.NovelWorkbench?.buildInteractivePanel ?? (typeof buildInteractivePanel === 'function' ? buildInteractivePanel : null);
+        if (!builder) return;
+        const panel = builder({ kind, payload });
+        output.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'panel-view';
+        const header = document.createElement('div');
+        header.className = 'panel-header';
+        const title = document.createElement('h2');
+        title.className = 'panel-title';
+        title.textContent = panel.title;
+        header.appendChild(title);
+        for (const badge of panel.badges ?? []) {
+          const span = document.createElement('span');
+          span.className = 'badge';
+          span.dataset.tone = badge.tone;
+          span.textContent = badge.label;
+          header.appendChild(span);
+        }
+        wrap.appendChild(header);
+        for (const section of panel.sections ?? []) {
+          const sec = document.createElement('div');
+          sec.className = 'section';
+          if (section.heading) {
+            const h3 = document.createElement('h3');
+            h3.textContent = section.heading;
+            sec.appendChild(h3);
+          }
+          if (section.kind === 'progress' && section.progress) {
+            const row = document.createElement('div');
+            row.className = 'progress-row';
+            row.dataset.tone = section.progress.tone;
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.textContent = section.progress.label;
+            const track = document.createElement('div');
+            track.className = 'track';
+            const fill = document.createElement('div');
+            fill.className = 'fill';
+            fill.style.width = `${Math.max(0, Math.min(100, section.progress.value))}%`;
+            track.appendChild(fill);
+            const value = document.createElement('span');
+            value.className = 'value';
+            value.textContent = `${Math.round(section.progress.value)}`;
+            row.append(label, track, value);
+            sec.appendChild(row);
+          } else if (section.kind === 'bar' && section.bars) {
+            for (const bar of section.bars) {
+              const row = document.createElement('div');
+              row.className = 'bar-row';
+              row.dataset.tone = bar.tone;
+              const label = document.createElement('span');
+              label.className = 'label';
+              label.textContent = bar.label;
+              const track = document.createElement('div');
+              track.className = 'track';
+              const fill = document.createElement('div');
+              fill.className = 'fill';
+              fill.style.width = `${Math.max(0, Math.min(100, bar.value))}%`;
+              track.appendChild(fill);
+              const value = document.createElement('span');
+              value.className = 'value';
+              value.textContent = `${Math.round(bar.value)}`;
+              row.append(label, track, value);
+              sec.appendChild(row);
+            }
+          } else if (section.kind === 'list' && section.items) {
+            const ul = document.createElement('ul');
+            ul.className = 'list';
+            for (const item of section.items) {
+              const li = document.createElement('li');
+              li.dataset.tone = item.tone ?? 'info';
+              const label = document.createElement('span');
+              label.className = 'label';
+              label.textContent = item.label;
+              li.appendChild(label);
+              if (item.value) {
+                const v = document.createElement('span');
+                v.textContent = item.value;
+                li.appendChild(v);
+              }
+              ul.appendChild(li);
+            }
+            sec.appendChild(ul);
+          } else if (section.kind === 'tree' && section.tree) {
+            const ul = document.createElement('ul');
+            ul.className = 'tree';
+            for (const node of section.tree) {
+              const li = document.createElement('li');
+              li.textContent = node.label;
+              ul.appendChild(li);
+            }
+            sec.appendChild(ul);
+          } else if (section.kind === 'metric' && section.metrics) {
+            const grid = document.createElement('div');
+            grid.className = 'metric-grid';
+            for (const metric of section.metrics) {
+              const card = document.createElement('div');
+              card.className = 'metric-card';
+              const label = document.createElement('div');
+              label.className = 'label';
+              label.textContent = metric.label;
+              const value = document.createElement('div');
+              value.className = 'value';
+              value.textContent = String(metric.value);
+              card.append(label, value);
+              grid.appendChild(card);
+            }
+            sec.appendChild(grid);
+          } else if (section.kind === 'note' && section.note) {
+            const note = document.createElement('div');
+            note.className = 'note';
+            note.textContent = section.note;
+            sec.appendChild(note);
+          }
+          wrap.appendChild(sec);
+        }
+        const rawWrap = document.createElement('div');
+        rawWrap.className = 'section';
+        const h3 = document.createElement('h3');
+        h3.textContent = '原始 JSON（点击展开）';
+        const detail = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'show / hide raw payload';
+        const pre = document.createElement('pre');
+        pre.style.minHeight = '0';
+        pre.style.padding = '0';
+        pre.style.background = 'transparent';
+        pre.style.color = 'var(--muted)';
+        pre.textContent = JSON.stringify(panel.raw, null, 2);
+        detail.append(summary, pre);
+        rawWrap.append(h3, detail);
+        wrap.appendChild(rawWrap);
+        output.appendChild(wrap);
+        download.disabled = panel.raw == null;
       }
 
       function renderLibrary() {
@@ -983,7 +1164,7 @@
       themeSwitcher.onchange = () => applyTheme(themeSwitcher.value);
       document.getElementById('create').onclick = () => render(buildArtifact('theme', document.getElementById('theme').value, document.getElementById('foreshadowing').value));
       document.getElementById('continue').onclick = () => render(buildArtifact('continue', document.getElementById('chapters').value, document.getElementById('foreshadowing').value));
-      document.getElementById('score').onclick = () => render({ kind: 'foreshadowing-score', ...scoreForeshadowing(document.getElementById('foreshadowing').value) });
+      document.getElementById('score').onclick = () => renderInteractivePanel('foreshadowing', scoreForeshadowing(document.getElementById('foreshadowing').value));
       document.getElementById('save-library').onclick = () => { if (currentArtifact?.projectId) { library.save(currentArtifact); renderLibrary(); } };
       document.getElementById('export-library').onclick = () => render({ kind: 'library-export', items: library.list() });
       document.getElementById('import-compare').onclick = () => {
@@ -997,20 +1178,20 @@
         render({ kind: 'library-import', ...result, total: library.list().length });
       };
       document.getElementById('import-guide').onclick = () => render({ kind: 'artifact-import-guide', ...buildImportGuide(document.getElementById('guide-json').value) });
-      document.getElementById('quality-panel').onclick = () => render({ kind: 'continuation-quality-panel', report: renderQualityPanel(currentArtifact, document.getElementById('quality-text').value) });
+      document.getElementById('quality-panel').onclick = () => renderInteractivePanel('quality-panel', { status: assessContinuationQuality(currentArtifact || createFromTheme(document.getElementById('theme').value), document.getElementById('quality-text').value).status, report: renderQualityPanel(currentArtifact, document.getElementById('quality-text').value), subscores: assessContinuationQuality(currentArtifact || createFromTheme(document.getElementById('theme').value), document.getElementById('quality-text').value).subscores });
       document.getElementById('cleanup-plan').onclick = () => render({ kind: 'library-cleanup-plan', ...planLibraryCleanup(library.list(), Number(document.getElementById('cleanup-keep').value) || 1) });
-      document.getElementById('provider-check').onclick = () => render({ kind: 'provider-readiness', ...buildProviderReadiness({ provider: document.getElementById('provider-name').value, model: 'deterministic' }) });
+      document.getElementById('provider-check').onclick = () => renderInteractivePanel('provider-readiness', buildProviderReadiness({ provider: document.getElementById('provider-name').value, model: 'deterministic' }));
       document.getElementById('flue-plan').onclick = () => render({ kind: 'flue-workflow-plan', ...buildFlueWorkflowPlan(currentArtifact) });
       document.getElementById('desktop-ready').onclick = () => render({ kind: 'desktop-shell-readiness', ...buildDesktopShellReadiness() });
       document.getElementById('longform-console').onclick = () => render({ kind: 'longform-console', ...buildLongformConsole(library.list()) });
       document.getElementById('artifact-import-studio').onclick = () => render({ kind: 'artifact-import-studio', ...buildArtifactImportStudio(JSON.stringify(currentArtifact || createFromTheme(document.getElementById('theme').value)), library.list()) });
-      document.getElementById('longform-project-os').onclick = () => render({ kind: 'longform-project-os', ...buildLongformProjectOS(library.list()) });
+      document.getElementById('longform-project-os').onclick = () => renderInteractivePanel('longform-os', buildLongformProjectOS(library.list()));
       document.getElementById('quality-repair-loop').onclick = () => render({ kind: 'quality-repair-loop', ...buildQualityRepairLoop(currentArtifact, document.getElementById('quality-text').value) });
       document.getElementById('provider-live-runtime').onclick = () => render({ kind: 'provider-live-runtime', ...buildProviderLiveRuntime({ provider: document.getElementById('provider-name').value, model: 'deterministic', prompt: document.getElementById('quality-text').value }) });
       document.getElementById('flue-workflow-runner').onclick = () => render({ kind: 'flue-workflow-runner', ...buildFlueWorkflowRunner(currentArtifact) });
       document.getElementById('desktop-file-bridge').onclick = () => render({ kind: 'desktop-file-bridge', ...buildDesktopFileBridge('.', library.list()) });
       document.getElementById('collaboration-pack').onclick = () => render({ kind: 'collaboration-pack', ...buildCollaborationPack(library.list(), 'local-reviewer') });
-      document.getElementById('narrative-analytics').onclick = () => render({ kind: 'narrative-analytics', ...buildNarrativeAnalytics(library.list()) });
+      document.getElementById('narrative-analytics').onclick = () => renderInteractivePanel('narrative-analytics', buildNarrativeAnalytics(library.list()));
       document.getElementById('publishing-pipeline').onclick = () => render({ kind: 'publishing-pipeline', ...buildPublishingPipeline(currentArtifact || createFromTheme(document.getElementById('theme').value), { format: 'epub' }) });
       document.getElementById('agent-studio').onclick = () => render({ kind: 'agent-studio', ...buildAgentStudio(currentArtifact) });
       document.getElementById('mode-parity').onclick = () => render({ kind: 'mode-parity', matrix: buildModeParityMatrix(), panel: renderWebModeParityPanel() });

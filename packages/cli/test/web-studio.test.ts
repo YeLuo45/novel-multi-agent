@@ -20,6 +20,7 @@ import {
   buildWebHelp,
   buildWebNavigation,
   buildWebOnboarding,
+  buildInteractivePanel,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -269,5 +270,105 @@ describe('web-first studio models', () => {
     assert.equal(dismissed.activeView, 'library');
     assert.equal(dismissed.welcomeDismissed, true);
     assert.deepEqual(dismissed.onboarding.map((step) => step.step), [1, 2, 3]);
+  });
+
+  it('builds V42 interactive quality panel with progress bar subscores and advice note', () => {
+    const panel = buildInteractivePanel({
+      kind: 'quality-panel',
+      payload: {
+        status: 'pass',
+        report: {
+          status: 'pass',
+          subscores: { characters: 88, foreshadowing: 76, style: 92 },
+          advice: '继续使用角色名和伏笔。',
+        },
+      },
+    });
+    assert.equal(panel.kind, 'quality-panel');
+    assert.equal(panel.badges[0]?.label, 'pass');
+    assert.equal(panel.badges[0]?.tone, 'pass');
+    const progress = panel.sections.find((section) => section.kind === 'progress');
+    assert.ok(progress?.progress);
+    assert.ok(progress!.progress!.value >= 70 && progress!.progress!.value <= 100);
+    const bar = panel.sections.find((section) => section.kind === 'bar');
+    assert.equal(bar?.bars?.length, 3);
+    assert.ok(bar?.bars?.every((entry) => entry.tone === 'pass' || entry.tone === 'warn'));
+    const note = panel.sections.find((section) => section.kind === 'note');
+    assert.ok(note?.note?.includes('角色'));
+  });
+
+  it('builds V42 interactive provider readiness panel with badges and diagnostics list', () => {
+    const panel = buildInteractivePanel({
+      kind: 'provider-readiness',
+      payload: { ready: true, mode: 'mock', diagnostics: ['pass: mock provider ready', 'warn: latency 120ms'] },
+    });
+    assert.equal(panel.badges.length, 2);
+    assert.equal(panel.badges[0]?.tone, 'pass');
+    assert.equal(panel.badges[1]?.tone, 'info');
+    const list = panel.sections.find((section) => section.kind === 'list');
+    assert.equal(list?.items?.length, 2);
+    assert.equal(list?.items?.[0]?.tone, 'pass');
+    assert.equal(list?.items?.[1]?.tone, 'warn');
+  });
+
+  it('builds V42 interactive longform os panel with tree foreshadowing ledger and character arcs', () => {
+    const panel = buildInteractivePanel({
+      kind: 'longform-os',
+      payload: {
+        volumes: [{ id: 'v1', title: '守夜卷' }, { id: 'v2', title: '失忆卷' }],
+        ledger: {
+          foreshadowing: [{ name: '银匙', status: 'recovered' }, { name: '月尘脚印', status: 'overdue' }],
+          characterArcs: [{ projectId: 'moon-1', protagonist: '林澈', arc: '从守夜到逃亡' }],
+        },
+      },
+    });
+    assert.equal(panel.badges[0]?.label, '2 卷');
+    const tree = panel.sections.find((section) => section.kind === 'tree');
+    assert.equal(tree?.tree?.length, 2);
+    assert.equal(tree?.tree?.[0]?.depth, 0);
+    const ledgerSection = panel.sections.find((section) => section.heading === '伏笔台账');
+    assert.equal(ledgerSection?.items?.length, 2);
+    assert.equal(ledgerSection?.items?.[0]?.tone, 'pass');
+    assert.equal(ledgerSection?.items?.[1]?.tone, 'fail');
+  });
+
+  it('builds V42 interactive narrative analytics panel with character bars and pacing metrics', () => {
+    const panel = buildInteractivePanel({
+      kind: 'narrative-analytics',
+      payload: {
+        characterAppearances: [
+          { name: '林澈', mentions: 4 },
+          { name: '墨塔', mentions: 2 },
+        ],
+        pacing: { chapters: 6, averageWords: 850 },
+      },
+    });
+    assert.equal(panel.badges[0]?.label, '2 角色');
+    const bar = panel.sections.find((section) => section.kind === 'bar');
+    assert.equal(bar?.bars?.length, 2);
+    assert.ok((bar?.bars?.[0]?.value ?? 0) > 0);
+    const metric = panel.sections.find((section) => section.kind === 'metric');
+    assert.equal(metric?.metrics?.length, 2);
+    assert.equal(metric?.metrics?.[0]?.value, 6);
+  });
+
+  it('builds V42 interactive foreshadowing panel with recovered open overdue tone coloring', () => {
+    const panel = buildInteractivePanel({
+      kind: 'foreshadowing',
+      payload: { recovered: ['银匙'], open: ['旧门'], overdue: ['月尘脚印'], score: 50 },
+    });
+    assert.equal(panel.badges[0]?.tone, 'warn');
+    const listSections = panel.sections.filter((section) => section.kind === 'list');
+    assert.equal(listSections.length, 3);
+    assert.equal(listSections[0]?.items?.[0]?.tone, 'pass');
+    assert.equal(listSections[1]?.items?.[0]?.tone, 'warn');
+    assert.equal(listSections[2]?.items?.[0]?.tone, 'fail');
+  });
+
+  it('builds V42 interactive fallback panel for unknown kinds with raw JSON note', () => {
+    const panel = buildInteractivePanel({ kind: 'unknown-kind', payload: { hello: 'world' } });
+    assert.equal(panel.kind, 'unknown-kind');
+    assert.equal(panel.sections.length, 1);
+    assert.ok(panel.sections[0]?.note?.includes('hello'));
   });
 });

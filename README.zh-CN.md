@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V42 Web 交互式工作流面板（替代 pre 输出 JSON）
+
+- `buildInteractivePanel(kind, payload)` 把 5 个核心面板（quality / provider-readiness / longform-os / narrative-analytics / foreshadowing）从 JSON 文本升级为带 badges + progress / bar / list / tree / metric / note 6 类 section 的组件视图。
+- Web 端新增 `renderInteractivePanel()` DOM 渲染器：按 tone（pass/warn/fail/info）着色进度条、徽章、列表项，支持原始 JSON details 折叠查看。
+- 6 大改写按钮：续写质量 / 伏笔评分 / Provider 实战 / 长篇工程 OS / 叙事分析，全部从 pre 输出转为专用组件视图。
+- vm sandbox 兼容：shorthand 属性 `buildInteractivePanel` 通过 `Object.assign` + typeof guard 注入，避免 vm context 抛 ReferenceError。
+- Theme-aware CSS：所有 panel badge / progress / bar / list / tree / metric 都走 `var(--bg/panel/text/border/accent)`，4 套主题自动适配。
+
 ## V41 Web 可发现性重塑（导航 + 默认视图 + Onboarding）
 
 - 顶部 tab 导航：总控台 / 新建 / 项目库 / 质量 / 全方向 / 帮助 六张切换卡，按主题分块切换 `.grid > section` 显隐。

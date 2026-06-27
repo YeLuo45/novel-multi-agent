@@ -117,6 +117,136 @@ export function buildWebDefaultView(options: { activeView?: WebViewId; dismissed
   };
 }
 
+export interface InteractivePanel {
+  kind: string;
+  title: string;
+  badges: Array<{ label: string; tone: 'pass' | 'warn' | 'fail' | 'info' }>;
+  sections: InteractivePanelSection[];
+  raw: unknown;
+}
+
+export interface InteractivePanelSection {
+  kind: 'metric' | 'progress' | 'list' | 'tree' | 'bar' | 'note';
+  heading?: string;
+  items?: Array<{ label: string; value: string; tone?: 'pass' | 'warn' | 'fail' | 'info' }>;
+  metrics?: Array<{ label: string; value: number; suffix?: string }>;
+  progress?: { label: string; value: number; tone: 'pass' | 'warn' | 'fail' | 'info' };
+  bars?: Array<{ label: string; value: number; tone: 'pass' | 'warn' | 'fail' | 'info' }>;
+  tree?: Array<{ id: string; label: string; depth: number; children?: Array<{ id: string; label: string }> }>;
+  note?: string;
+}
+
+function toneFromScore(score: number): 'pass' | 'warn' | 'fail' {
+  if (score >= 80) return 'pass';
+  if (score >= 50) return 'warn';
+  return 'fail';
+}
+
+export function buildInteractivePanel(input: { kind: string; payload: unknown }): InteractivePanel {
+  const { kind, payload } = input;
+  const data = (payload && typeof payload === 'object' ? payload : {}) as Record<string, any>;
+
+  if (kind === 'quality-panel') {
+    const status = String(data.status ?? (data.report?.status ?? 'unknown'));
+    const sub = data.report?.subscores ?? data.subscores ?? {};
+    const scores = [
+      { label: 'characters', value: Number(sub.characters ?? 0) },
+      { label: 'foreshadowing', value: Number(sub.foreshadowing ?? 0) },
+      { label: 'style', value: Number(sub.style ?? 0) },
+    ];
+    const overall = scores.reduce((sum, item) => sum + item.value, 0) / Math.max(scores.length, 1);
+    return {
+      kind: 'quality-panel',
+      title: '续写质量面板',
+      badges: [{ label: status, tone: status === 'pass' ? 'pass' : status === 'warn' ? 'warn' : 'fail' }],
+      sections: [
+        { kind: 'progress', heading: '总体质量', progress: { label: 'overall', value: Math.round(overall), tone: toneFromScore(overall) } },
+        { kind: 'bar', heading: '子分数', bars: scores.map((item) => ({ label: item.label, value: item.value, tone: toneFromScore(item.value) as 'pass' | 'warn' | 'fail' })) },
+        { kind: 'note', heading: '建议', note: data.report?.advice ?? data.advice ?? '继续在续写中使用角色名、伏笔、文风指纹。' },
+      ],
+      raw: data,
+    };
+  }
+
+  if (kind === 'provider-readiness') {
+    const ready = Boolean(data.ready);
+    const diagnostics = (data.diagnostics ?? []) as string[];
+    const mode = String(data.mode ?? 'mock');
+    return {
+      kind: 'provider-readiness',
+      title: 'Provider 实战面板',
+      badges: [{ label: ready ? 'ready' : 'not-ready', tone: ready ? 'pass' : 'fail' }, { label: mode, tone: 'info' }],
+      sections: [
+        { kind: 'list', heading: '诊断', items: diagnostics.map((line) => ({ label: line, value: '', tone: line.startsWith('fail') ? 'fail' : line.startsWith('warn') ? 'warn' : line.startsWith('pass') ? 'pass' : 'info' as 'pass' | 'warn' | 'fail' | 'info' })) },
+      ],
+      raw: data,
+    };
+  }
+
+  if (kind === 'longform-os') {
+    const volumes = (data.volumes ?? []) as Array<{ id?: string; title?: string }>;
+    const ledger = data.ledger ?? {};
+    const foreshadowing = (ledger.foreshadowing ?? []) as Array<{ name?: string; status?: string }>;
+    const arcs = (ledger.characterArcs ?? []) as Array<{ projectId?: string; protagonist?: string; arc?: string }>;
+    const tree = volumes.flatMap((volume) => ([
+      { id: String(volume.id ?? volume.title ?? ''), label: `卷：${volume.title ?? volume.id ?? ''}`, depth: 0 },
+    ]));
+    return {
+      kind: 'longform-os',
+      title: '长篇工程 OS',
+      badges: [{ label: `${volumes.length} 卷`, tone: 'info' }, { label: `${foreshadowing.length} 伏笔`, tone: foreshadowing.length > 0 ? 'pass' : 'warn' }],
+      sections: [
+        { kind: 'tree', heading: '分卷结构', tree },
+        { kind: 'list', heading: '伏笔台账', items: foreshadowing.map((item) => ({ label: item.name ?? '', value: item.status ?? '', tone: (item.status === 'recovered' ? 'pass' : item.status === 'overdue' ? 'fail' : 'warn') as 'pass' | 'warn' | 'fail' })) },
+        { kind: 'list', heading: '人物弧线', items: arcs.map((item) => ({ label: item.protagonist ?? '', value: item.arc ?? '', tone: 'info' as const })) },
+      ],
+      raw: data,
+    };
+  }
+
+  if (kind === 'narrative-analytics') {
+    const characters = (data.characterAppearances ?? []) as Array<{ name?: string; mentions?: number }>;
+    const pacing = data.pacing ?? {};
+    return {
+      kind: 'narrative-analytics',
+      title: '叙事分析',
+      badges: [{ label: `${characters.length} 角色`, tone: 'info' }],
+      sections: [
+        { kind: 'bar', heading: '角色出场', bars: characters.slice(0, 8).map((item) => ({ label: item.name ?? '', value: Math.min(100, (item.mentions ?? 0) * 20), tone: 'info' as const })) },
+        { kind: 'metric', heading: '节奏指标', metrics: [{ label: '章节数', value: Number(pacing.chapters ?? 0) }, { label: '平均字数', value: Number(pacing.averageWords ?? 0) }] },
+      ],
+      raw: data,
+    };
+  }
+
+  if (kind === 'foreshadowing') {
+    const recovered = (data.recovered ?? []) as string[];
+    const open = (data.open ?? []) as string[];
+    const overdue = (data.overdue ?? []) as string[];
+    const score = Number(data.score ?? 100);
+    return {
+      kind: 'foreshadowing',
+      title: '伏笔回收评分',
+      badges: [{ label: `score ${score}`, tone: toneFromScore(score) }],
+      sections: [
+        { kind: 'progress', heading: '回收率', progress: { label: 'recovery', value: score, tone: toneFromScore(score) } },
+        { kind: 'list', heading: '已回收', items: recovered.map((name) => ({ label: name, value: '', tone: 'pass' as const })) },
+        { kind: 'list', heading: '开放中', items: open.map((name) => ({ label: name, value: '', tone: 'warn' as const })) },
+        { kind: 'list', heading: '逾期', items: overdue.map((name) => ({ label: name, value: '', tone: 'fail' as const })) },
+      ],
+      raw: data,
+    };
+  }
+
+  return {
+    kind,
+    title: kind,
+    badges: [],
+    sections: [{ kind: 'note', heading: '原始数据', note: JSON.stringify(payload, null, 2) }],
+    raw: payload,
+  };
+}
+
 function textOf(artifact: StudioArtifact): string {
   const body = artifact.artifact ?? {};
   return [
