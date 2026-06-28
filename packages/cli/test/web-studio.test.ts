@@ -138,6 +138,9 @@ import {
   validateBrowserDualWrite,
   buildBrowserDualWriteCode,
   runBrowserDualWrite,
+  validateBrowserFallback,
+  buildBrowserFallbackCode,
+  runBrowserFallbackWrite,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2373,5 +2376,47 @@ describe('web-first studio models', () => {
     assert.equal(noMock.primaryWritten, false);
     assert.equal(noMock.secondaryWritten, false);
     assert.equal(noMock.ready, false);
+  });
+
+  it('validates V82 browser fallback environment with indexedDB localStorage and fallback storage', () => {
+    const v = validateBrowserFallback();
+    assert.equal(typeof v.isBrowser, 'boolean');
+    assert.equal(typeof v.hasIndexedDB, 'boolean');
+    assert.equal(typeof v.hasLocalStorage, 'boolean');
+    assert.equal(typeof v.ready, 'boolean');
+    assert.equal(v.fallbackStorage === 'localStorage' || v.fallbackStorage === 'indexedDB', true);
+  });
+
+  it('builds V82 browser fallback code with writeCode readbackCode fullCode and bytes', () => {
+    const codeLS = buildBrowserFallbackCode('v82-payload', 'v82-fb-key', { useIndexedDB: false });
+    assert.ok(codeLS.writeCode.includes("localStorage.setItem('v82-fb-key'"));
+    assert.ok(codeLS.writeCode.includes('v82-payload'));
+    assert.ok(codeLS.readbackCode.includes("localStorage.getItem('v82-fb-key'"));
+    assert.ok(codeLS.fullCode.includes('v82-payload'));
+    assert.ok(codeLS.bytes > 0);
+    assert.equal(codeLS.ready, true);
+
+    const codeIdb = buildBrowserFallbackCode('v82-payload', 'v82-fb-key', { useIndexedDB: true });
+    assert.ok(codeIdb.writeCode.includes("indexedDB.open('novel-ma'"));
+    assert.ok(codeIdb.writeCode.includes("tx.objectStore('projects')"));
+    assert.ok(codeIdb.readbackCode.includes("tx.objectStore('projects')"));
+  });
+
+  it('runs V82 browser fallback write with localStorage mock and readback match', () => {
+    const mockStore: Record<string, string> = {};
+    const result = runBrowserFallbackWrite('v82-payload', 'v82-fb-key', { localStorage: { setItem: (k, v) => { mockStore[k] = v; }, getItem: (k) => mockStore[k] ?? null } });
+    assert.equal(result.fallbackWritten, true);
+    assert.equal(result.fallbackKey, 'v82-fb-key');
+    assert.equal(result.fallbackValue, 'v82-payload');
+    assert.equal(result.readbackSuccess, true);
+    assert.equal(result.storageType, 'localStorage');
+    assert.equal(result.errorMessage, null);
+    assert.equal(result.ready, true);
+    assert.ok(result.timestamp.length > 0);
+
+    const noMock = runBrowserFallbackWrite('data', 'key', {});
+    assert.equal(noMock.fallbackWritten, false);
+    assert.equal(noMock.ready, false);
+    assert.ok(noMock.errorMessage !== null);
   });
 });

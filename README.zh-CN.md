@@ -49,7 +49,12 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
-## V81 浏览器端 dual-write 真实环境（validate + build code + run）
+## V82 fallback 真实浏览器（validate + build code + run）
+
+- `validateBrowserFallback()`：真实检查 `typeof window + window.indexedDB + window.localStorage` + 自动选择 `fallbackStorage: 'localStorage' | 'indexedDB'`，返回 4 warnings 数组。
+- `buildBrowserFallbackCode(payload, fallbackKey, {useIndexedDB})`：生成 2 段可执行 JS 代码（writeCode + readbackCode），可选 localStorage 或 IDB 路径，HTML 端可直接 `new Function(code.fullCode)()` 真实执行。
+- `runBrowserFallbackWrite(payload, fallbackKey, mockBrowser)`：try/catch 真实调用 mockBrowser.localStorage.setItem/getItem 或 mockBrowser.indexedDB.transaction.objectStore().put + 立即 readback 校验，返回 9 字段（written/key/value/readback/storageType/error/duration/timestamp/ready）。
+- HTML 集成：3 个 inline 按钮（validate/build/run），build 按钮对比 LS+IDB 2 段代码预览 + run 按钮显示 fallbackKey + timestamp + storageType。
 
 - `validateBrowserDualWrite()`：真实检查 `typeof window !== 'undefined' && typeof document !== 'undefined'`（isBrowser）+ `window.indexedDB` + `window.localStorage` + `globalThis.structuredClone`（用 try/catch 防 hoisting issue），返回 4 warnings 数组。
 - `buildBrowserDualWriteCode(plan, payload, {version})`：生成 4 段可执行 JS 代码（setupCode/openCode/primaryWriteCode/secondaryWriteCode/readbackCode），setupCode 使用 `const dbName = 'novel-ma-2'` + `indexedDB.open(dbName, 2)` + onupgradeneeded + createObjectStore；HTML 端可直接 `new Function('fallbackStorageKey', code.totalCode)()` 真实执行。

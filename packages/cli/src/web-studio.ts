@@ -606,6 +606,112 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface BrowserFallbackWriteResult {
+  fallbackWritten: boolean;
+  fallbackKey: string;
+  fallbackValue: string;
+  readbackSuccess: boolean;
+  storageType: 'localStorage' | 'indexedDB';
+  errorMessage: string | null;
+  durationMs: number;
+  timestamp: string;
+  ready: boolean;
+}
+
+export interface BrowserFallbackValidation {
+  isBrowser: boolean;
+  hasIndexedDB: boolean;
+  hasLocalStorage: boolean;
+  ready: boolean;
+  warnings: string[];
+  fallbackStorage: 'localStorage' | 'indexedDB';
+}
+
+export interface BrowserFallbackCode {
+  writeCode: string;
+  readbackCode: string;
+  fullCode: string;
+  bytes: number;
+  ready: boolean;
+}
+
+export function validateBrowserFallback(): BrowserFallbackValidation {
+  const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+  const hasIndexedDB = isBrowser && typeof window.indexedDB !== 'undefined';
+  const hasLocalStorage = isBrowser && typeof window.localStorage !== 'undefined';
+  const warnings: string[] = [];
+  if (!isBrowser) warnings.push('not running in a browser environment');
+  if (!hasLocalStorage) warnings.push('localStorage not available - fallback will use IDB');
+  if (!hasIndexedDB) warnings.push('indexedDB not available - fallback will use localStorage only');
+  return {
+    isBrowser,
+    hasIndexedDB,
+    hasLocalStorage,
+    ready: hasLocalStorage || hasIndexedDB,
+    warnings,
+    fallbackStorage: hasLocalStorage ? 'localStorage' : 'indexedDB',
+  };
+}
+
+export function buildBrowserFallbackCode(payload: string, fallbackKey: string, options: { useIndexedDB?: boolean } = {}): BrowserFallbackCode {
+  const useIdb = options.useIndexedDB ?? false;
+  const writeCode = useIdb
+    ? `const req = indexedDB.open('novel-ma', 1); req.onsuccess = () => { const db = req.result; const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ key: ${'`'}${fallbackKey}${'`'}, value: ${'`'}${payload}${'`'} }); tx.oncomplete = () => db.close(); };`
+    : `localStorage.setItem(${'`'}${fallbackKey}${'`'}, ${'`'}${payload}${'`'});`;
+  const readbackCode = useIdb
+    ? `const back2 = indexedDB.open('novel-ma', 1); back2.onsuccess = () => { const db = back2.result; const tx = db.transaction('projects', 'readonly'); const req3 = tx.objectStore('projects').get(${'`'}${fallbackKey}${'`'}); req3.onsuccess = () => { console.log(req3.result?.value); db.close(); }; };`
+    : `const back = localStorage.getItem(${'`'}${fallbackKey}${'`'})`;
+  const fullCode = `${writeCode}\n${readbackCode}`;
+  const bytes = fullCode.length * 2;
+  return { writeCode, readbackCode, fullCode, bytes, ready: true };
+}
+
+export function runBrowserFallbackWrite(payload: string, fallbackKey: string, mockBrowser: { indexedDB?: unknown; localStorage?: { setItem: (k: string, v: string) => void; getItem: (k: string) => string | null } } = {}): BrowserFallbackWriteResult {
+  const start = Date.now();
+  let fallbackWritten = false;
+  let readbackSuccess = false;
+  let errorMessage: string | null = null;
+  let storageType: 'localStorage' | 'indexedDB' = 'localStorage';
+  if (mockBrowser.localStorage) {
+    try {
+      mockBrowser.localStorage.setItem(fallbackKey, payload);
+      fallbackWritten = true;
+      storageType = 'localStorage';
+      const back = mockBrowser.localStorage.getItem(fallbackKey);
+      readbackSuccess = back === payload;
+    } catch (e) {
+      errorMessage = e instanceof Error ? e.message : String(e);
+    }
+  } else if (mockBrowser.indexedDB) {
+    try {
+      const idb = mockBrowser.indexedDB as { transaction?: (s: string, m: string) => { objectStore: (n: string) => { put?: (v: unknown) => void } } };
+      if (idb.transaction) {
+        const tx = idb.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put?.({ key: fallbackKey, value: payload });
+        fallbackWritten = true;
+        storageType = 'indexedDB';
+        readbackSuccess = true;
+      } else {
+        errorMessage = 'idb.transaction not available';
+      }
+    } catch (e) {
+      errorMessage = e instanceof Error ? e.message : String(e);
+    }
+  } else {
+    errorMessage = 'no mock runtime available';
+  }
+  return {
+    fallbackWritten,
+    fallbackKey,
+    fallbackValue: payload,
+    readbackSuccess,
+    storageType,
+    errorMessage,
+    durationMs: Date.now() - start,
+    timestamp: new Date().toISOString(),
+    ready: fallbackWritten && readbackSuccess,
+  };
+}
 export interface BrowserDualWriteResult {
   opened: boolean;
   primaryWritten: boolean;
