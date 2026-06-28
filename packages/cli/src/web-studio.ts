@@ -606,6 +606,92 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface IdbIntegrationTestCase {
+  name: string;
+  description: string;
+  executor: IdbExecutor;
+  expectedSuccess: boolean;
+  expectedFallback: boolean;
+  expectedSteps: number;
+}
+
+export interface IdbIntegrationTestResult {
+  name: string;
+  passed: boolean;
+  actualSuccess: boolean;
+  actualFallback: boolean;
+  actualSteps: number;
+  errorMessage: string | null;
+  durationMs: number;
+}
+
+export interface IdbIntegrationCoverage {
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  coveragePercent: number;
+  results: IdbIntegrationTestResult[];
+  ready: boolean;
+}
+
+export function buildIdbIntegrationTestCases(): IdbIntegrationTestCase[] {
+  return [
+    {
+      name: 'basic-put-single',
+      description: '单条 put 写入项目',
+      executor: buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true }),
+      expectedSuccess: true,
+      expectedFallback: false,
+      expectedSteps: 4,
+    },
+    {
+      name: 'basic-count-after-put',
+      description: 'put 后 count',
+      executor: buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }, { kind: 'count', store: 'projects', expect: 'count' }], supportsIdb: true }),
+      expectedSuccess: true,
+      expectedFallback: false,
+      expectedSteps: 5,
+    },
+    {
+      name: 'no-idb-fallback',
+      description: 'IDB 不支持时 fallback',
+      executor: buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: false, fallbackStorageKey: 'novel-ma:artifacts' }),
+      expectedSuccess: false,
+      expectedFallback: true,
+      expectedSteps: 4,
+    },
+    {
+      name: 'getall-empty',
+      description: 'getAll 空仓库',
+      executor: buildIdbExecutor({ operations: [{ kind: 'getAll', store: 'undo', expect: 'all' }], supportsIdb: true }),
+      expectedSuccess: true,
+      expectedFallback: false,
+      expectedSteps: 4,
+    },
+  ];
+}
+
+export async function runIdbIntegrationTest(test: IdbIntegrationTestCase): Promise<IdbIntegrationTestResult> {
+  const start = Date.now();
+  try {
+    const handle = buildIdbMockHandle({ supportsIdb: test.executor.ready });
+    const plan = planIdbExecution(test.executor, { fallbackStorageKey: 'novel-ma:artifacts' });
+    const runtime = await simulateIdbRuntime(plan, handle, { fallbackStorageKey: 'novel-ma:artifacts' });
+    const passed = runtime.success === test.expectedSuccess && runtime.fallbackUsed === test.expectedFallback && runtime.stepsCompleted === test.expectedSteps;
+    return { name: test.name, passed, actualSuccess: runtime.success, actualFallback: runtime.fallbackUsed, actualSteps: runtime.stepsCompleted, errorMessage: passed ? null : `expected success=${test.expectedSuccess} fallback=${test.expectedFallback} steps=${test.expectedSteps}; got success=${runtime.success} fallback=${runtime.fallbackUsed} steps=${runtime.stepsCompleted}`, durationMs: Date.now() - start };
+  } catch (err) {
+    return { name: test.name, passed: false, actualSuccess: false, actualFallback: false, actualSteps: 0, errorMessage: String(err), durationMs: Date.now() - start };
+  }
+}
+
+export async function assessIdbIntegrationCoverage(tests: IdbIntegrationTestCase[]): Promise<IdbIntegrationCoverage> {
+  const results: IdbIntegrationTestResult[] = [];
+  for (const test of tests) results.push(await runIdbIntegrationTest(test));
+  const passedCases = results.filter((r) => r.passed).length;
+  const failedCases = results.length - passedCases;
+  const coveragePercent = results.length === 0 ? 0 : Math.round((passedCases / results.length) * 100);
+  return { totalCases: results.length, passedCases, failedCases, coveragePercent, results, ready: coveragePercent === 100 };
+}
 export interface IdbMockStore {
   put: (key: string, value: unknown) => Promise<void>;
   get: (key: string) => Promise<unknown | undefined>;

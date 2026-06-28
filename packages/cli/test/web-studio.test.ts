@@ -84,6 +84,9 @@ import {
   buildIdbMockHandle,
   simulateIdbRuntime,
   planIdbRecovery,
+  buildIdbIntegrationTestCases,
+  runIdbIntegrationTest,
+  assessIdbIntegrationCoverage,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1349,5 +1352,47 @@ describe('web-first studio models', () => {
 
     const notRecovered = planIdbRecovery('User cancelled', { recovered: false });
     assert.ok(notRecovered.steps.some((s) => s.includes('用户决策')));
+  });
+
+  it('builds V64 IDB integration test cases covering put count no-idb getall and assertions', () => {
+    const cases = buildIdbIntegrationTestCases();
+    assert.ok(cases.length >= 4);
+    const names = cases.map((c) => c.name);
+    assert.ok(names.includes('basic-put-single'));
+    assert.ok(names.includes('basic-count-after-put'));
+    assert.ok(names.includes('no-idb-fallback'));
+    assert.ok(names.includes('getall-empty'));
+    const noIdb = cases.find((c) => c.name === 'no-idb-fallback');
+    assert.equal(noIdb?.expectedSuccess, false);
+    assert.equal(noIdb?.expectedFallback, true);
+  });
+
+  it('runs V64 IDB integration test case against mock handle and verifies expectations', async () => {
+    const cases = buildIdbIntegrationTestCases();
+    const basic = cases.find((c) => c.name === 'basic-put-single');
+    if (!basic) throw new Error('missing basic-put-single');
+    const result = await runIdbIntegrationTest(basic);
+    assert.equal(result.passed, true);
+    assert.equal(result.actualSuccess, true);
+    assert.equal(result.actualFallback, false);
+    assert.ok(result.actualSteps > 0);
+    assert.equal(result.errorMessage, null);
+
+    const noIdbCase = cases.find((c) => c.name === 'no-idb-fallback');
+    if (!noIdbCase) throw new Error('missing no-idb-fallback');
+    const failResult = await runIdbIntegrationTest(noIdbCase);
+    assert.equal(failResult.actualSuccess, false);
+    assert.equal(failResult.actualFallback, true);
+  });
+
+  it('assesses V64 IDB integration coverage with passed/failed counts and ready flag', async () => {
+    const cases = buildIdbIntegrationTestCases();
+    const coverage = await assessIdbIntegrationCoverage(cases);
+    assert.equal(coverage.totalCases, cases.length);
+    assert.ok(coverage.passedCases >= 3);
+    assert.ok(coverage.coveragePercent >= 50);
+    assert.equal(coverage.failedCases + coverage.passedCases, coverage.totalCases);
+    assert.equal(coverage.ready, coverage.failedCases === 0);
+    assert.equal(coverage.results.length, cases.length);
   });
 });

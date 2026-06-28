@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V64 IDB 集成测试（4 用例 + mock handle + 100% 覆盖率断言）
+
+- `buildIdbIntegrationTestCases()`：4 内置用例：basic-put-single / basic-count-after-put / no-idb-fallback / getall-empty，每个含 executor + expectedSuccess/Fallback/Steps。
+- `runIdbIntegrationTest(test)` async：用 V63 mock handle + V60 planIdbExecution + V63 simulateIdbRuntime 执行单个 case，断言三字段相等返回 `IdbIntegrationTestResult`。
+- `assessIdbIntegrationCoverage(tests)` async：聚合 N 个 case 返回 `{totalCases, passedCases, failedCases, coveragePercent, results[], ready}`，ready=true iff failedCases===0。
+- HTML 集成：2 个 inline 按钮（列出所有测试用例 / 运行所有集成测试），从 wb?.buildIdbIntegrationTestCases() 取数据。
+- 关键修复：V63 patch 时误删 IdbMockStore interface（前向声明 IdbIntegrationTestCase block），单独补回后通过。
+
 ## V63 IDB 真实 runtime 模拟（mock handle + execute + 错误恢复）
 
 - `buildIdbMockHandle({supportsIdb, stores})`：返回 `{stores{projects/tags/undo put/get/getAll/delete/count/clear/close}, isOpen, supportsIdb, open, close}`。
