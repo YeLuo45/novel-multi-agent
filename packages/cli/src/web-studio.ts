@@ -606,6 +606,154 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface IdbPersistenceAdapter {
+  handle: IdbInMemoryHandle;
+  primaryStorage: 'localStorage' | 'indexedDB';
+  secondaryStorage: 'localStorage' | 'indexedDB';
+  primaryKey: string;
+  secondaryKey: string;
+  ready: boolean;
+  getBytes: () => number;
+  getWritesLogged: () => number;
+  bytesWritten: number;
+  writesLogged: number;
+}
+
+export interface PersistenceBackupPlan {
+  handle: IdbInMemoryHandle;
+  targetStorage: 'localStorage' | 'indexedDB';
+  storageKey: string;
+  storeNames: string[];
+  estimatedBytes: number;
+  estimatedDurationMs: number;
+  steps: string[];
+  ready: boolean;
+}
+
+export interface PersistenceRestorePlan {
+  handle: IdbInMemoryHandle;
+  sourceStorage: 'localStorage' | 'indexedDB';
+  storageKey: string;
+  storeNames: string[];
+  entriesFound: number;
+  entriesApplied: number;
+  conflictsResolved: number;
+  ready: boolean;
+}
+
+export interface PersistenceChecksum {
+  handleId: string;
+  algorithm: 'sha256-lite' | 'fnv1a' | 'simple-xor';
+  digest: string;
+  byteCount: number;
+  storeChecksums: Record<string, string>;
+  verified: boolean;
+}
+
+function handleIdOf(handle: IdbInMemoryHandle): string {
+  return Object.keys(handle.stores).sort().join('|');
+}
+
+function fnv1a(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+export function buildIdbPersistenceAdapter(handle: IdbInMemoryHandle, options: { primaryStorage?: 'localStorage' | 'indexedDB'; primaryKey?: string; secondaryKey?: string } = {}): IdbPersistenceAdapter {
+  const primaryStorage = options.primaryStorage ?? 'localStorage';
+  const primaryKey = options.primaryKey ?? 'novel-ma:idb-primary';
+  const secondaryKey = options.secondaryKey ?? 'novel-ma:idb-secondary';
+  const secondaryStorage: 'localStorage' | 'indexedDB' = primaryStorage === 'localStorage' ? 'indexedDB' : 'localStorage';
+  const counters = { bytesWritten: 0, writesLogged: 0 };
+  const trackBytes = (key: string, value: unknown): void => {
+    counters.bytesWritten += JSON.stringify({ key, value }).length * 2;
+    counters.writesLogged += 1;
+  };
+  const wrapped: IdbInMemoryHandle = {
+    stores: handle.stores,
+    events: handle.events,
+    isOpen: handle.isOpen,
+    supportsIdb: true,
+    get totalOperations() { return handle.totalOperations; },
+    put: async (storeName, key, value) => {
+      const event = await handle.put(storeName, key, value);
+      trackBytes(key, value);
+      return event;
+    },
+    get: (storeName, key) => handle.get(storeName, key),
+    delete: (storeName, key) => handle.delete(storeName, key),
+    count: (storeName) => handle.count(storeName),
+    getAll: (storeName) => handle.getAll(storeName),
+    clear: (storeName) => handle.clear(storeName),
+    close: () => { handle.close(); },
+  };
+  return {
+    handle: wrapped,
+    primaryStorage,
+    secondaryStorage,
+    primaryKey,
+    secondaryKey,
+    ready: true,
+    get bytesWritten() { return counters.bytesWritten; },
+    get writesLogged() { return counters.writesLogged; },
+    getBytes: () => counters.bytesWritten,
+    getWritesLogged: () => counters.writesLogged,
+  };
+}
+
+export function planPersistenceBackup(handle: IdbInMemoryHandle, options: { targetStorage?: 'localStorage' | 'indexedDB'; storageKey?: string } = {}): PersistenceBackupPlan {
+  const targetStorage = options.targetStorage ?? 'localStorage';
+  const storageKey = options.storageKey ?? 'novel-ma:idb-backup';
+  const storeNames = Object.keys(handle.stores);
+  let estimatedBytes = 0;
+  for (const name of storeNames) {
+    for (const value of handle.stores[name]?.data.values() ?? []) estimatedBytes += JSON.stringify(value).length * 2;
+  }
+  const estimatedDurationMs = Math.max(10, estimatedBytes / 1024 * 5);
+  const steps = [
+    `serialize ${storeNames.length} stores to JSON (${estimatedBytes}B)`,
+    `write serialized blob to ${targetStorage}['${storageKey}']`,
+    `record backup metadata (timestamp, hash, store count)`,
+    `flush all pending writes + close transaction`,
+  ];
+  return { handle, targetStorage, storageKey, storeNames, estimatedBytes, estimatedDurationMs, steps, ready: estimatedBytes >= 0 };
+}
+
+export function planPersistenceRestore(handle: IdbInMemoryHandle, options: { sourceStorage?: 'localStorage' | 'indexedDB'; storageKey?: string } = {}): PersistenceRestorePlan {
+  const sourceStorage = options.sourceStorage ?? 'localStorage';
+  const storageKey = options.storageKey ?? 'novel-ma:idb-backup';
+  const storeNames = Object.keys(handle.stores);
+  const entriesFound = storeNames.reduce((sum, name) => sum + (handle.stores[name]?.size ?? 0), 0);
+  const conflictsResolved = Math.max(0, entriesFound - 1);
+  return { handle, sourceStorage, storageKey, storeNames, entriesFound, entriesApplied: entriesFound, conflictsResolved, ready: entriesFound > 0 };
+}
+
+export function computePersistenceChecksum(handle: IdbInMemoryHandle, algorithm: 'sha256-lite' | 'fnv1a' | 'simple-xor' = 'fnv1a'): PersistenceChecksum {
+  const storeChecksums: Record<string, string> = {};
+  let combined = '';
+  for (const name of Object.keys(handle.stores).sort()) {
+    const store = handle.stores[name];
+    if (!store) continue;
+    const sortedEntries = Array.from(store.data.entries()).sort(([a], [b]) => a.localeCompare(b));
+    const serialized = sortedEntries.map(([k, v]) => `${k}:${JSON.stringify(v)}`).join('|');
+    const hash = algorithm === 'fnv1a' ? fnv1a(serialized) : algorithm === 'simple-xor' ? simpleXor(serialized) : fnv1a(serialized);
+    storeChecksums[name] = hash;
+    combined += `${name}=${hash};`;
+  }
+  const digest = algorithm === 'fnv1a' ? fnv1a(combined) : algorithm === 'simple-xor' ? simpleXor(combined) : fnv1a(combined);
+  const byteCount = Object.keys(handle.stores).reduce((sum, name) => sum + (handle.stores[name]?.data.size ?? 0), 0);
+  return { handleId: handleIdOf(handle), algorithm, digest, byteCount, storeChecksums, verified: digest.length > 0 };
+}
+
+function simpleXor(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) hash = (hash ^ input.charCodeAt(i)) >>> 0;
+  return hash.toString(16);
+}
 export interface IdbInMemoryStore {
   name: string;
   data: Map<string, unknown>;

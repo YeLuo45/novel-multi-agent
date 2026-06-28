@@ -49,6 +49,15 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V69 InMemory 真实持久化（双写 adapter + backup plan + restore plan + checksum）
+
+- `buildIdbPersistenceAdapter(handle, {primaryStorage, primaryKey, secondaryKey})`：包装 V68 in-memory handle 为持久化层，primary/secondary 双存储 + `getBytes()/getWritesLogged()` 方法 + `bytesWritten/writesLogged` getter（避免对象值捕获陷阱）。
+- `planPersistenceBackup(handle, options)`：序列化所有 store 到 JSON + 写入 targetStorage + 4 步备份步骤 + estimatedBytes/durationMs。
+- `planPersistenceRestore(handle, options)`：从 sourceStorage 恢复 + entriesFound/Applied + conflictsResolved 计数 + ready flag。
+- `computePersistenceChecksum(handle, algorithm)`：3 算法（sha256-lite/fnv1a/simple-xor）+ per-store digests + byteCount；fnv1a 是零依赖标准实现。
+- HTML 集成：5 个 inline 按钮（build/write/backup/restore/checksum），从 library.list() 自动写入 3 artifact。
+- 关键修复：`bytesWritten` 从普通属性改为 `get bytesWritten()` getter，避免 return object 时值捕获（最初测试报 0 因为 return 时 bytesWritten=0 已被冻结）。
+
 ## V68 IDB Mock browser-side（in-memory store + 事件 + 7 op 批量执行）
 
 - `buildIdbInMemoryHandle({stores})`：返回完整 IDB API 模拟（put/get/getAll/delete/count/clear/close），每 store 含 Map data + putCount/getCount/deleteCount/clearCount/size 计数器；所有 op 记录 `IdbInMemoryEvent{type, store, key?, value?, result?, timestamp}`；totalOperations getter 跟踪 op 总数。

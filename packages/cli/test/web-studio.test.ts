@@ -98,6 +98,10 @@ import {
   simulateIdbEval,
   buildIdbInMemoryHandle,
   runIdbInMemoryOps,
+  buildIdbPersistenceAdapter,
+  planPersistenceBackup,
+  planPersistenceRestore,
+  computePersistenceChecksum,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1621,5 +1625,64 @@ describe('web-first studio models', () => {
     assert.equal(result.errorCount, 1);
     assert.equal(handle.stores['projects'].putCount, 1);
     assert.equal(handle.totalOperations, 2);
+  });
+
+  it('builds V69 IDB persistence adapter with primary secondary storage keys and bytesWritten counter', async () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects'] });
+    const adapter = buildIdbPersistenceAdapter(handle, { primaryStorage: 'localStorage', primaryKey: 'k1', secondaryKey: 'k2' });
+    assert.equal(adapter.primaryStorage, 'localStorage');
+    assert.equal(adapter.secondaryStorage, 'indexedDB');
+    assert.equal(adapter.primaryKey, 'k1');
+    assert.equal(adapter.secondaryKey, 'k2');
+    assert.equal(adapter.ready, true);
+    assert.equal(adapter.bytesWritten, 0);
+    assert.equal(adapter.writesLogged, 0);
+    await adapter.handle.put('projects', 'p1', { x: 1 });
+    assert.ok(adapter.bytesWritten > 0);
+    assert.equal(adapter.writesLogged, 1);
+  });
+
+  it('plans V69 persistence backup with steps storeNames estimatedBytes and duration', async () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects', 'tags'] });
+    await handle.put('projects', 'p1', { x: 1 });
+    await handle.put('projects', 'p2', { x: 2 });
+    await handle.put('tags', 't1', { tag: 'fantasy' });
+    const plan = planPersistenceBackup(handle, { targetStorage: 'localStorage', storageKey: 'novel-ma:backup' });
+    assert.equal(plan.targetStorage, 'localStorage');
+    assert.equal(plan.storageKey, 'novel-ma:backup');
+    assert.equal(plan.storeNames.length, 2);
+    assert.ok(plan.estimatedBytes > 0);
+    assert.ok(plan.estimatedDurationMs > 0);
+    assert.ok(plan.steps.length >= 3);
+    assert.equal(plan.ready, true);
+  });
+
+  it('plans V69 persistence restore with entries found applied conflicts resolved and ready flag', async () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects', 'tags'] });
+    await handle.put('projects', 'p1', { x: 1 });
+    await handle.put('tags', 't1', { tag: 'fantasy' });
+    const plan = planPersistenceRestore(handle, { sourceStorage: 'localStorage', storageKey: 'novel-ma:backup' });
+    assert.equal(plan.sourceStorage, 'localStorage');
+    assert.equal(plan.entriesFound, 2);
+    assert.equal(plan.entriesApplied, 2);
+    assert.ok(plan.conflictsResolved >= 0);
+    assert.equal(plan.ready, true);
+  });
+
+  it('computes V69 persistence checksum with fnv1a simple-xor and storeChecksums', () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects', 'tags'] });
+    handle.put('projects', 'p1', { x: 1 });
+    handle.put('tags', 't1', { tag: 'fantasy' });
+    const fnv = computePersistenceChecksum(handle, 'fnv1a');
+    assert.equal(fnv.algorithm, 'fnv1a');
+    assert.ok(fnv.digest.length >= 6);
+    assert.ok(fnv.storeChecksums['projects']);
+    assert.ok(fnv.storeChecksums['tags']);
+    assert.equal(fnv.verified, true);
+    assert.ok(fnv.byteCount >= 2);
+
+    const xor = computePersistenceChecksum(handle, 'simple-xor');
+    assert.equal(xor.algorithm, 'simple-xor');
+    assert.notEqual(xor.digest, fnv.digest);
   });
 });
