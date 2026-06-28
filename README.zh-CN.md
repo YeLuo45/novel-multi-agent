@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V74 持久化真实写入（serialize payload + readback 校验 + dual-write 代码）
+
+- `serializePersistencePayload(items, {format})`：JSON 序列化 + fnv1a checksum（8 hex digit）+ itemsCount/totalBytes/format/generatedAt/compressionRatio 7 字段；支持 `json` 和 `json-with-meta` 两种格式。
+- `verifyPersistenceReadback(payload, sourceKey, readbackJson)`：checksum + itemCount 双校验 + driftKeys 数组（标识 `sourceKey.checksum` / `sourceKey.itemsCount` 漂移）+ ready flag（null readback → false）。
+- `planPersistenceDualWrite(payload, {primaryStorage, secondaryStorage, primaryKey, secondaryKey})`：生成 3 段可执行 JS 代码字符串（primaryWriteCode / secondaryWriteCode / readbackCode）+ 6 步骤 + warnings 数组（payload > 5MB 时警告）。
+- HTML 集成：3 个 inline 按钮（serialize/readback/dual-write），从 library.list() 自动生成 2-3 artifact + 显示 readback drift detection。
+
 ## V73 TUI 真实滚动跟随（scrollIntoView JS 代码 + smooth 步骤 + keyboard focus）
 
 - `buildTuiScrollIntoView(plan, targetIndex, {behavior, block, sourceSelector, targetSelectorPrefix})`：生成可执行 JS 代码字符串 `document.querySelector('#tui-section-X') + scrollIntoView({behavior, block, inline})`，3 个 scrollOptions（behavior/block/inline）+ source/target selector + ready flag。

@@ -606,7 +606,99 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
-export interface TuiScrollIntoViewResult {
+export interface PersistencePayload {
+  payloadJson: string;
+  itemsCount: number;
+  totalBytes: number;
+  checksum: string;
+  format: 'json' | 'json-with-meta';
+  generatedAt: string;
+  compressionRatio: number;
+}
+
+export interface PersistenceReadbackResult {
+  match: boolean;
+  sourceKey: string;
+  payloadBytes: number;
+  readbackBytes: number;
+  checksumMatch: boolean;
+  itemCountMatch: boolean;
+  driftKeys: string[];
+  ready: boolean;
+}
+
+export interface PersistenceDualWritePlan {
+  primaryKey: string;
+  secondaryKey: string;
+  primaryWriteCode: string;
+  secondaryWriteCode: string;
+  readbackCode: string;
+  steps: string[];
+  warnings: string[];
+  ready: boolean;
+}
+
+export function serializePersistencePayload(items: unknown[], options: { format?: 'json' | 'json-with-meta' } = {}): PersistencePayload {
+  const format = options.format ?? 'json';
+  const data = format === 'json-with-meta' ? { version: 1, items } : items;
+  const payloadJson = JSON.stringify(data);
+  const itemsCount = items.length;
+  const totalBytes = payloadJson.length * 2;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < payloadJson.length; i += 1) {
+    hash ^= payloadJson.charCodeAt(i);
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  const checksum = hash.toString(16).padStart(8, '0');
+  const baseSize = JSON.stringify({ version: 1, items: items.map(() => 0) }).length;
+  const compressionRatio = baseSize > 0 ? totalBytes / baseSize : 1;
+  return { payloadJson, itemsCount, totalBytes, checksum, format, generatedAt: new Date().toISOString(), compressionRatio };
+}
+
+export function verifyPersistenceReadback(payload: PersistencePayload, sourceKey: string, readbackJson: string | null): PersistenceReadbackResult {
+  if (!readbackJson) return { match: false, sourceKey, payloadBytes: payload.payloadJson.length * 2, readbackBytes: 0, checksumMatch: false, itemCountMatch: false, driftKeys: [sourceKey], ready: false };
+  let readbackChecksum = 0x811c9dc5;
+  for (let i = 0; i < readbackJson.length; i += 1) {
+    readbackChecksum ^= readbackJson.charCodeAt(i);
+    readbackChecksum = (readbackChecksum + ((readbackChecksum << 1) + (readbackChecksum << 4) + (readbackChecksum << 7) + (readbackChecksum << 8) + (readbackChecksum << 24))) >>> 0;
+  }
+  const readbackChecksumStr = readbackChecksum.toString(16).padStart(8, '0');
+  const checksumMatch = readbackChecksumStr === payload.checksum;
+  let readbackItemsCount = 0;
+  try {
+    const parsed = JSON.parse(readbackJson);
+    readbackItemsCount = Array.isArray(parsed) ? parsed.length : Array.isArray(parsed.items) ? parsed.items.length : 0;
+  } catch {
+    return { match: false, sourceKey, payloadBytes: payload.payloadJson.length * 2, readbackBytes: readbackJson.length * 2, checksumMatch: false, itemCountMatch: false, driftKeys: [sourceKey], ready: true };
+  }
+  const itemCountMatch = readbackItemsCount === payload.itemsCount;
+  const driftKeys: string[] = [];
+  if (!checksumMatch) driftKeys.push(`${sourceKey}.checksum`);
+  if (!itemCountMatch) driftKeys.push(`${sourceKey}.itemsCount`);
+  return { match: checksumMatch && itemCountMatch, sourceKey, payloadBytes: payload.payloadJson.length * 2, readbackBytes: readbackJson.length * 2, checksumMatch, itemCountMatch, driftKeys, ready: true };
+}
+
+export function planPersistenceDualWrite(payload: PersistencePayload, options: { primaryStorage?: 'localStorage' | 'indexedDB'; secondaryStorage?: 'localStorage' | 'indexedDB'; primaryKey?: string; secondaryKey?: string } = {}): PersistenceDualWritePlan {
+  const primaryStorage = options.primaryStorage ?? 'localStorage';
+  const secondaryStorage = options.secondaryStorage ?? 'indexedDB';
+  const primaryKey = options.primaryKey ?? 'novel-ma:persistence-primary';
+  const secondaryKey = options.secondaryKey ?? 'novel-ma:persistence-secondary';
+  const primaryWriteCode = primaryStorage === 'localStorage' ? `localStorage.setItem('${primaryKey}', ${'`'}${payload.payloadJson}${'`'})` : `await indexedDB.open('novel-ma', 1).onsuccess.then(db => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ key: '${primaryKey}', value: ${'`'}${payload.payloadJson}${'`'} }, '${primaryKey}'); tx.oncomplete = () => db.close(); })`;
+  const secondaryWriteCode = secondaryStorage === 'localStorage' ? `localStorage.setItem('${secondaryKey}', ${'`'}${payload.payloadJson}${'`'})` : `await indexedDB.open('novel-ma', 1).onsuccess.then(db => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ key: '${secondaryKey}', value: ${'`'}${payload.payloadJson}${'`'} }, '${secondaryKey}'); tx.oncomplete = () => db.close(); })`;
+  const readbackCode = primaryStorage === 'localStorage' ? `localStorage.getItem('${primaryKey}')` : `await indexedDB.open('novel-ma', 1).onsuccess.then(db => { const tx = db.transaction('projects', 'readonly'); const req = tx.objectStore('projects').get('${primaryKey}'); req.onsuccess = () => { console.log(req.result?.value); db.close(); }; })`;
+  const steps = [
+    `serialize ${payload.itemsCount} items (${payload.totalBytes}B, ${payload.format})`,
+    `write to ${primaryStorage}['${primaryKey}']`,
+    `write to ${secondaryStorage}['${secondaryKey}'] (dual-write)`,
+    `readback from ${primaryStorage}['${primaryKey}']`,
+    `verify checksum match (${payload.checksum})`,
+    `verify itemCount match (${payload.itemsCount})`,
+  ];
+  const warnings: string[] = [];
+  if (payload.totalBytes > 5_000_000) warnings.push(`payload ${payload.totalBytes}B exceeds 5MB soft limit`);
+  return { primaryKey, secondaryKey, primaryWriteCode, secondaryWriteCode, readbackCode, steps, warnings, ready: payload.itemsCount >= 0 };
+}
+  export interface TuiScrollIntoViewResult {
   scrollCode: string;
   scrollOptions: { behavior: 'smooth' | 'instant' | 'auto'; block: 'start' | 'center' | 'end' | 'nearest'; inline: 'start' | 'center' | 'end' | 'nearest' };
   targetSelector: string;

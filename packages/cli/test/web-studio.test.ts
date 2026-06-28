@@ -114,6 +114,9 @@ import {
   buildTuiScrollIntoView,
   planTuiSmoothScroll,
   buildTuiKeyboardFocus,
+  serializePersistencePayload,
+  verifyPersistenceReadback,
+  planPersistenceDualWrite,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1878,5 +1881,59 @@ describe('web-first studio models', () => {
     assert.equal(focus.ariaSelected, true);
     assert.equal(focus.hasFocus, true);
     assert.equal(focus.ready, true);
+  });
+
+  it('serializes V74 persistence payload with items count bytes checksum format and timestamp', () => {
+    const items = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const payload = serializePersistencePayload(items, { format: 'json-with-meta' });
+    assert.equal(payload.itemsCount, 3);
+    assert.ok(payload.totalBytes > 0);
+    assert.ok(payload.checksum.length === 8);
+    assert.equal(payload.format, 'json-with-meta');
+    assert.ok(payload.payloadJson.includes('"version":1'));
+    assert.ok(payload.payloadJson.includes('"items"'));
+    assert.ok(payload.generatedAt.length > 0);
+    assert.ok(payload.compressionRatio > 0);
+  });
+
+  it('verifies V74 persistence readback with checksum and itemCount match and drift detection', () => {
+    const items = [{ x: 1 }, { x: 2 }];
+    const payload = serializePersistencePayload(items);
+    const perfect = verifyPersistenceReadback(payload, 'k', payload.payloadJson);
+    assert.equal(perfect.match, true);
+    assert.equal(perfect.checksumMatch, true);
+    assert.equal(perfect.itemCountMatch, true);
+    assert.equal(perfect.driftKeys.length, 0);
+    assert.equal(perfect.ready, true);
+
+    const mismatch = verifyPersistenceReadback(payload, 'k', 'corrupted data');
+    assert.equal(mismatch.match, false);
+
+    const nullBack = verifyPersistenceReadback(payload, 'k', null);
+    assert.equal(nullBack.match, false);
+    assert.equal(nullBack.ready, false);
+
+    const wrongFormat = verifyPersistenceReadback(payload, 'k', '{"version":1,"items":[]}');
+    assert.equal(wrongFormat.itemCountMatch, false);
+    assert.ok(wrongFormat.driftKeys.length >= 1);
+  });
+
+  it('plans V74 persistence dual-write with primary/secondary codes readback steps and warnings', () => {
+    const payload = serializePersistencePayload([{ a: 1 }]);
+    const plan = planPersistenceDualWrite(payload, { primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryKey: 'p1', secondaryKey: 'p2' });
+    assert.equal(plan.primaryKey, 'p1');
+    assert.equal(plan.secondaryKey, 'p2');
+    assert.ok(plan.primaryWriteCode.includes('localStorage.setItem'));
+    assert.ok(plan.secondaryWriteCode.includes('indexedDB.open'));
+    assert.ok(plan.readbackCode.includes('localStorage.getItem'));
+    assert.equal(plan.steps.length, 6);
+    assert.ok(plan.steps.some((s) => s.includes('serialize')));
+    assert.ok(plan.steps.some((s) => s.includes('checksum match')));
+    assert.equal(plan.warnings.length, 0);
+    assert.equal(plan.ready, true);
+
+    const largePayload = serializePersistencePayload(new Array(100_000).fill({ x: 'a'.repeat(50) }));
+    const largePlan = planPersistenceDualWrite(largePayload);
+    assert.ok(largePlan.warnings.length >= 1);
   });
 });
