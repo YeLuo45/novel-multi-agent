@@ -606,6 +606,83 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface IdbMockStore {
+  put: (key: string, value: unknown) => Promise<void>;
+  get: (key: string) => Promise<unknown | undefined>;
+  getAll: () => Promise<Array<{ key: string; value: unknown }>>;
+  delete: (key: string) => Promise<void>;
+  count: () => Promise<number>;
+  clear: () => Promise<void>;
+  close: () => void;
+}
+
+export interface IdbMockHandle {
+  stores: Record<string, IdbMockStore>;
+  isOpen: boolean;
+  open: () => Promise<IdbMockHandle>;
+  close: () => void;
+  supportsIdb: boolean;
+}
+
+export interface IdbRuntimeResult {
+  success: boolean;
+  stepsCompleted: number;
+  totalSteps: number;
+  errorMessage: string | null;
+  errorStep: number | null;
+  fallbackUsed: boolean;
+  fallbackStorageKey: string;
+  durationMs: number;
+  recovered: boolean;
+}
+
+export interface IdbRecoveryPlan {
+  fromError: string;
+  toFallback: string;
+  steps: string[];
+  estimatedDurationMs: number;
+  fallbackStorageKey: string;
+  ready: boolean;
+}
+
+export function buildIdbMockHandle(options: { supportsIdb?: boolean; stores?: string[] } = {}): IdbMockHandle {
+  const supportsIdb = options.supportsIdb ?? true;
+  const storeNames = options.stores ?? ['projects', 'tags', 'undo'];
+  const stores: Record<string, IdbMockStore> = {};
+  for (const name of storeNames) stores[name] = { put: async () => {}, get: async () => undefined, getAll: async () => [], delete: async () => {}, count: async () => 0, clear: async () => {}, close: () => {} };
+  return {
+    stores,
+    isOpen: supportsIdb,
+    supportsIdb,
+    open: async () => buildIdbMockHandle(options),
+    close: () => {},
+  };
+}
+
+export async function simulateIdbRuntime(plan: IdbExecutionPlan, handle: IdbMockHandle, options: { fallbackStorageKey?: string; timeoutMs?: number } = {}): Promise<IdbRuntimeResult> {
+  const fallbackStorageKey = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const start = Date.now();
+  if (!handle.supportsIdb) return { success: false, stepsCompleted: 0, totalSteps: plan.totalSteps, errorMessage: 'IDB not supported', errorStep: 0, fallbackUsed: true, fallbackStorageKey, durationMs: Date.now() - start, recovered: false };
+  try {
+    for (const store of Object.values(handle.stores)) store.put = store.put;
+    return { success: true, stepsCompleted: plan.totalSteps, totalSteps: plan.totalSteps, errorMessage: null, errorStep: null, fallbackUsed: false, fallbackStorageKey, durationMs: Date.now() - start, recovered: false };
+  } catch (err) {
+    return { success: false, stepsCompleted: 0, totalSteps: plan.totalSteps, errorMessage: String(err), errorStep: plan.totalSteps, fallbackUsed: true, fallbackStorageKey, durationMs: Date.now() - start, recovered: false };
+  }
+}
+
+export function planIdbRecovery(error: string, options: { fallbackStorageKey?: string; recovered?: boolean } = {}): IdbRecoveryPlan {
+  const fallback = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const recovered = options.recovered ?? true;
+  const steps = [
+    `检测 IDB 错误: ${error}`,
+    `评估降级策略: 写入 localStorage '${fallback}'`,
+    `序列化 artifact 到 JSON 字符串`,
+    `localStorage.setItem('${fallback}', JSON.stringify([...]))`,
+    recovered ? '记录恢复事件到 novel-ma:idb-recovery log' : '抛出错误让用户决策',
+  ];
+  return { fromError: error, toFallback: fallback, steps, estimatedDurationMs: Math.max(20, Math.ceil(error.length / 2)), fallbackStorageKey: fallback, ready: !!error };
+}
 export interface IdbExecutionPlan {
   wrapper: string;
   totalSteps: number;

@@ -81,6 +81,9 @@ import {
   buildThemeConfig,
   buildThemeOptions,
   planThemeMigration,
+  buildIdbMockHandle,
+  simulateIdbRuntime,
+  planIdbRecovery,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1301,5 +1304,50 @@ describe('web-first studio models', () => {
 
     const self = planThemeMigration('light', 'light');
     assert.equal(self.ready, true);
+  });
+
+  it('builds V63 IDB mock handle with 3 stores put get getAll delete count close and supportsIdb flag', () => {
+    const handle = buildIdbMockHandle({ stores: ['projects', 'tags', 'undo'] });
+    assert.equal(handle.isOpen, true);
+    assert.equal(handle.supportsIdb, true);
+    assert.equal(Object.keys(handle.stores).length, 3);
+    assert.ok(handle.stores['projects']);
+    assert.equal(typeof handle.stores['projects'].put, 'function');
+    assert.equal(typeof handle.stores['projects'].get, 'function');
+    assert.equal(typeof handle.stores['projects'].count, 'function');
+    const noIdb = buildIdbMockHandle({ supportsIdb: false });
+    assert.equal(noIdb.isOpen, false);
+    assert.equal(noIdb.supportsIdb, false);
+  });
+
+  it('simulates V63 IDB runtime with mock handle returning success and recover fallback flag', async () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const plan = planIdbExecution(executor, { fallbackStorageKey: 'novel-ma:artifacts' });
+    const handle = buildIdbMockHandle();
+    const ok = await simulateIdbRuntime(plan, handle, { fallbackStorageKey: 'novel-ma:artifacts' });
+    assert.equal(ok.success, true);
+    assert.equal(ok.stepsCompleted, plan.totalSteps);
+    assert.equal(ok.fallbackUsed, false);
+    assert.equal(ok.recovered, false);
+    assert.equal(ok.fallbackStorageKey, 'novel-ma:artifacts');
+
+    const noIdb = await simulateIdbRuntime(plan, buildIdbMockHandle({ supportsIdb: false }));
+    assert.equal(noIdb.success, false);
+    assert.equal(noIdb.fallbackUsed, true);
+    assert.equal(noIdb.errorMessage, 'IDB not supported');
+  });
+
+  it('plans V63 IDB recovery with steps fallback key and ready flag', () => {
+    const plan = planIdbRecovery('QuotaExceededError on store projects', { fallbackStorageKey: 'novel-ma:artifacts', recovered: true });
+    assert.ok(plan.fromError.includes('QuotaExceededError'));
+    assert.equal(plan.toFallback, 'novel-ma:artifacts');
+    assert.ok(plan.steps.length >= 4);
+    assert.ok(plan.steps.some((s) => s.includes('localStorage')));
+    assert.equal(plan.fallbackStorageKey, 'novel-ma:artifacts');
+    assert.ok(plan.estimatedDurationMs > 0);
+    assert.equal(plan.ready, true);
+
+    const notRecovered = planIdbRecovery('User cancelled', { recovered: false });
+    assert.ok(notRecovered.steps.some((s) => s.includes('用户决策')));
   });
 });

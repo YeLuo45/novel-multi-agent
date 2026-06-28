@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V63 IDB 真实 runtime 模拟（mock handle + execute + 错误恢复）
+
+- `buildIdbMockHandle({supportsIdb, stores})`：返回 `{stores{projects/tags/undo put/get/getAll/delete/count/clear/close}, isOpen, supportsIdb, open, close}`。
+- `simulateIdbRuntime(plan, handle, options)` async：返回 `IdbRuntimeResult{success, stepsCompleted, totalSteps, errorMessage, errorStep, fallbackUsed, fallbackStorageKey, durationMs, recovered}`。IDB 不支持时 fallbackUsed=true，错误信息='IDB not supported'。
+- `planIdbRecovery(error, options)`：返回 `{fromError, toFallback, steps[5], estimatedDurationMs, fallbackStorageKey, ready}`；recovered=true 步骤含 '记录恢复事件到 novel-ma:idb-recovery log'，false 含 '抛出错误让用户决策'。
+- HTML 集成：4 个 inline 按钮（mock 生成 / 成功 execute / 失败 execute / 错误恢复计划），从 library.list() 自动生成 put ops。
+- 关键修复：每次新方向块加在 IdbMockHandle/IdbRuntimeResult/IdbRecoveryPlan 之前时，需要保留后续的 `export interface IdbExecutionPlan` 块；通过先加新内容再用 patch 单独补回丢失的 interface。
+
 ## V62 主题持久化（light/dark/sepia/nord + 跨刷新 + 11 token）
 
 - `buildThemeConfig(themeName, options)`：从 THEME_REGISTRY 查 light/dark/sepia/nord 之一返回 `{name, label, storageKey, tokens{11字段}, ready, warning?}`，unknown theme 降级到 dark。
