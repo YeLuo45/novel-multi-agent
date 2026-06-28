@@ -117,6 +117,9 @@ import {
   serializePersistencePayload,
   verifyPersistenceReadback,
   planPersistenceDualWrite,
+  runDualWrite,
+  extractDualWriteError,
+  planDualWriteRecovery,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1935,5 +1938,54 @@ describe('web-first studio models', () => {
     const largePayload = serializePersistencePayload(new Array(100_000).fill({ x: 'a'.repeat(50) }));
     const largePlan = planPersistenceDualWrite(largePayload);
     assert.ok(largePlan.warnings.length >= 1);
+  });
+
+  it('runs V75 dual-write with primary/secondary/readback status and errors', () => {
+    const payload = serializePersistencePayload([{ a: 1 }, { a: 2 }]);
+    const plan = planPersistenceDualWrite(payload, { primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryKey: 'k1', secondaryKey: 'k2' });
+    const mockStore: Record<string, string> = {};
+    const result = runDualWrite(plan, { localStorage: { setItem: (k, v) => { mockStore[k] = v; }, getItem: (k) => mockStore[k] ?? null }, indexedDB: {} });
+    assert.equal(result.primarySuccess, true);
+    assert.equal(result.primaryWritten, true);
+    assert.equal(result.secondaryWritten, true);
+    assert.equal(result.readbackMatched, true);
+    assert.equal(result.readbackSuccess, true);
+    assert.equal(result.primaryError, null);
+    assert.equal(result.secondaryError, null);
+    assert.equal(result.attempt, 1);
+    assert.ok(result.durationMs >= 0);
+  });
+
+  it('extracts V75 dual-write error info with category and suggestion for primary and secondary', () => {
+    const mk = (primaryErr: string | null, secondaryErr: string | null): DualWriteRunResult => ({ primarySuccess: false, secondarySuccess: false, readbackSuccess: false, primaryError: primaryErr, secondaryError: secondaryErr, readbackError: null, primaryWritten: false, secondaryWritten: false, readbackMatched: false, durationMs: 0, attempt: 1 });
+    const quota = extractDualWriteError(mk('QuotaExceededError: full', 'QuotaExceededError: full'));
+    assert.equal(quota.primaryCategory, 'QuotaExceeded');
+    assert.equal(quota.secondaryCategory, 'QuotaExceeded');
+    assert.ok(quota.primarySuggestion.includes('清理'));
+    const invalid = extractDualWriteError(mk('InvalidStateError: closed', null));
+    assert.equal(invalid.primaryCategory, 'InvalidState');
+    assert.equal(invalid.secondaryCategory, 'Other');
+    const sec = extractDualWriteError(mk(null, 'SecurityError: denied'));
+    assert.equal(sec.primaryCategory, 'Other');
+    assert.equal(sec.secondaryCategory, 'Security');
+  });
+
+  it('plans V75 dual-write recovery with attempts delays strategies and recoverable flag', () => {
+    const payload = serializePersistencePayload([{ a: 1 }]);
+    const plan = planPersistenceDualWrite(payload, { primaryStorage: 'localStorage', secondaryStorage: 'localStorage', primaryKey: 'k1', secondaryKey: 'k2' });
+    const r1 = planDualWriteRecovery(plan, 1);
+    assert.equal(r1.attempt, 1);
+    assert.equal(r1.maxAttempts, 3);
+    assert.equal(r1.nextDelayMs, 400);
+    assert.ok(r1.strategies.includes('retry-immediate'));
+    assert.equal(r1.primaryRecoverable, true);
+
+    const r3 = planDualWriteRecovery(plan, 3);
+    assert.equal(r3.nextDelayMs, 0);
+    assert.ok(r3.strategies.includes('fallback-storage'));
+
+    const large = planPersistenceDualWrite(serializePersistencePayload(new Array(100_000).fill({ x: 'a'.repeat(50) })));
+    const lr = planDualWriteRecovery(large, 1);
+    assert.equal(lr.primaryRecoverable, false);
   });
 });

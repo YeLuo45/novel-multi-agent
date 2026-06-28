@@ -606,6 +606,131 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface DualWriteRunResult {
+  primarySuccess: boolean;
+  secondarySuccess: boolean;
+  readbackSuccess: boolean;
+  primaryError: string | null;
+  secondaryError: string | null;
+  readbackError: string | null;
+  primaryWritten: boolean;
+  secondaryWritten: boolean;
+  readbackMatched: boolean;
+  durationMs: number;
+  attempt: number;
+}
+
+export interface DualWriteError {
+  primaryCategory: 'QuotaExceeded' | 'InvalidState' | 'Type' | 'Security' | 'Syntax' | 'Other';
+  secondaryCategory: 'QuotaExceeded' | 'InvalidState' | 'Type' | 'Security' | 'Syntax' | 'Other';
+  primarySuggestion: string;
+  secondarySuggestion: string;
+}
+
+export interface DualWriteRecoveryPlan {
+  attempt: number;
+  maxAttempts: number;
+  strategies: Array<'retry-immediate' | 'retry-after-backoff' | 'fallback-storage' | 'abort'>;
+  nextDelayMs: number;
+  primaryRecoverable: boolean;
+  secondaryRecoverable: boolean;
+  ready: boolean;
+}
+
+export function runDualWrite(plan: PersistenceDualWritePlan, mockRuntime: { localStorage?: { setItem?: (k: string, v: string) => void; getItem?: (k: string) => string | null }; indexedDB?: unknown } = {}): DualWriteRunResult {
+  const start = Date.now();
+  let primaryWritten = false;
+  let secondaryWritten = false;
+  let readbackMatched = false;
+  let primaryError: string | null = null;
+  let secondaryError: string | null = null;
+  let readbackError: string | null = null;
+  try {
+    if (plan.primaryStorage === undefined || plan.primaryStorage === 'localStorage') {
+      if (mockRuntime.localStorage?.setItem) mockRuntime.localStorage.setItem(plan.primaryKey, '__payload__');
+      primaryWritten = true;
+    }
+  } catch (e) {
+    primaryError = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    if (plan.secondaryStorage === 'indexedDB') {
+      if (mockRuntime.indexedDB) secondaryWritten = true;
+      else secondaryError = 'indexedDB not available in runtime';
+    } else if (mockRuntime.localStorage?.setItem) {
+      mockRuntime.localStorage.setItem(plan.secondaryKey, '__payload__');
+      secondaryWritten = true;
+    }
+  } catch (e) {
+    secondaryError = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    if (plan.primaryStorage === undefined || plan.primaryStorage === 'localStorage') {
+      const back = mockRuntime.localStorage?.getItem?.(plan.primaryKey);
+      readbackMatched = back === '__payload__';
+      if (!readbackMatched && !primaryError) readbackError = 'readback value mismatch';
+    } else if (mockRuntime.indexedDB) {
+      readbackMatched = primaryWritten;
+    }
+  } catch (e) {
+    readbackError = e instanceof Error ? e.message : String(e);
+  }
+  return {
+    primarySuccess: primaryWritten && primaryError === null,
+    secondarySuccess: secondaryWritten && secondaryError === null,
+    readbackSuccess: readbackMatched && readbackError === null,
+    primaryError,
+    secondaryError,
+    readbackError,
+    primaryWritten,
+    secondaryWritten,
+    readbackMatched,
+    durationMs: Date.now() - start,
+    attempt: 1,
+  };
+}
+
+export function extractDualWriteError(result: DualWriteRunResult): DualWriteError {
+  function classify(err: string | null): DualWriteError['primaryCategory'] {
+    if (!err) return 'Other';
+    if (/quota/i.test(err)) return 'QuotaExceeded';
+    if (/invalidstate/i.test(err)) return 'InvalidState';
+    if (/type/i.test(err)) return 'Type';
+    if (/security/i.test(err)) return 'Security';
+    if (/syntax/i.test(err)) return 'Syntax';
+    return 'Other';
+  }
+  function suggest(cat: DualWriteError['primaryCategory']): string {
+    if (cat === 'QuotaExceeded') return '清理旧数据后重试';
+    if (cat === 'InvalidState') return '关闭并重新打开数据库连接';
+    if (cat === 'Type') return '检查 value 类型与 ObjectStore schema 一致';
+    if (cat === 'Security') return '检查浏览器 storage 配额与跨域权限';
+    if (cat === 'Syntax') return '检查 generated code 模板';
+    return '查看 full error log';
+  }
+  const primaryCategory = classify(result.primaryError);
+  const secondaryCategory = classify(result.secondaryError);
+  return {
+    primaryCategory,
+    secondaryCategory,
+    primarySuggestion: suggest(primaryCategory),
+    secondarySuggestion: suggest(secondaryCategory),
+  };
+}
+
+export function planDualWriteRecovery(plan: PersistenceDualWritePlan, attempt: number, options: { maxAttempts?: number } = {}): DualWriteRecoveryPlan {
+  const maxAttempts = Math.max(1, Math.min(10, options.maxAttempts ?? 3));
+  const current = Math.max(1, Math.min(maxAttempts, attempt));
+  const nextDelayMs = current >= maxAttempts ? 0 : Math.min(30_000, 200 * Math.pow(2, current));
+  const primaryRecoverable = plan.warnings.length === 0;
+  const secondaryRecoverable = plan.warnings.length === 0;
+  const strategies: DualWriteRecoveryPlan['strategies'] = current >= maxAttempts
+    ? ['fallback-storage', 'abort']
+    : current === 1
+      ? ['retry-immediate', 'retry-after-backoff', 'fallback-storage']
+      : ['retry-after-backoff', 'fallback-storage'];
+  return { attempt: current, maxAttempts, strategies, nextDelayMs, primaryRecoverable, secondaryRecoverable, ready: plan.ready };
+}
 export interface PersistencePayload {
   payloadJson: string;
   itemsCount: number;
@@ -628,6 +753,8 @@ export interface PersistenceReadbackResult {
 }
 
 export interface PersistenceDualWritePlan {
+  primaryStorage: 'localStorage' | 'indexedDB';
+  secondaryStorage: 'localStorage' | 'indexedDB';
   primaryKey: string;
   secondaryKey: string;
   primaryWriteCode: string;
@@ -696,9 +823,9 @@ export function planPersistenceDualWrite(payload: PersistencePayload, options: {
   ];
   const warnings: string[] = [];
   if (payload.totalBytes > 5_000_000) warnings.push(`payload ${payload.totalBytes}B exceeds 5MB soft limit`);
-  return { primaryKey, secondaryKey, primaryWriteCode, secondaryWriteCode, readbackCode, steps, warnings, ready: payload.itemsCount >= 0 };
+  return { primaryStorage, secondaryStorage, primaryKey, secondaryKey, primaryWriteCode, secondaryWriteCode, readbackCode, steps, warnings, ready: payload.itemsCount >= 0 };
 }
-  export interface TuiScrollIntoViewResult {
+export interface TuiScrollIntoViewResult {
   scrollCode: string;
   scrollOptions: { behavior: 'smooth' | 'instant' | 'auto'; block: 'start' | 'center' | 'end' | 'nearest'; inline: 'start' | 'center' | 'end' | 'nearest' };
   targetSelector: string;

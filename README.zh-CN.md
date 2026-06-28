@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V75 dual-write 真实执行（runDualWrite + 5 类错误 + 3 重试策略）
+
+- `runDualWrite(plan, mockRuntime)`：用 try/catch 真实执行 V74 primary/secondary write + readback；mockRuntime 接受 localStorage {setItem/getItem} 和 indexedDB；返回 `DualWriteRunResult{primarySuccess/secondarySuccess/readbackSuccess/Written/Matched/Error/durationMs/attempt}` 13 字段。
+- `extractDualWriteError(result)`：独立分类 primary 和 secondary 错误（5 类 QuotaExceeded/InvalidState/Type/Security/Syntax/Other + 建议），含 SecurityError 检测（处理浏览器跨域场景）。
+- `planDualWriteRecovery(plan, attempt, {maxAttempts})`：指数退避 200*2^attempt ms + 3 策略 + primaryRecoverable/secondaryRecoverable 双标志（plan.warnings 空时为 true）。
+- HTML 集成：3 个 inline 按钮（run/error/retry），mockRuntime 用真实 JS Map 模拟 localStorage。
+- 关键修复：PersistenceDualWritePlan interface 缺 primaryStorage/secondaryStorage 字段 + planPersistenceDualWrite return 缺这两个字段 + 误加 `  export interface` 双空格前缀。
+
 ## V74 持久化真实写入（serialize payload + readback 校验 + dual-write 代码）
 
 - `serializePersistencePayload(items, {format})`：JSON 序列化 + fnv1a checksum（8 hex digit）+ itemsCount/totalBytes/format/generatedAt/compressionRatio 7 字段；支持 `json` 和 `json-with-meta` 两种格式。
