@@ -606,6 +606,140 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface IdbInMemoryStore {
+  name: string;
+  data: Map<string, unknown>;
+  putCount: number;
+  getCount: number;
+  deleteCount: number;
+  clearCount: number;
+  size: number;
+}
+
+export interface IdbInMemoryEvent {
+  type: 'put' | 'get' | 'delete' | 'clear' | 'count';
+  store: string;
+  key?: string;
+  value?: unknown;
+  result?: unknown;
+  timestamp: number;
+}
+
+export interface IdbInMemoryHandle {
+  stores: Record<string, IdbInMemoryStore>;
+  events: IdbInMemoryEvent[];
+  isOpen: boolean;
+  supportsIdb: true;
+  totalOperations: number;
+  put: (storeName: string, key: string, value: unknown) => Promise<IdbInMemoryEvent>;
+  get: (storeName: string, key: string) => Promise<IdbInMemoryEvent>;
+  delete: (storeName: string, key: string) => Promise<IdbInMemoryEvent>;
+  count: (storeName: string) => Promise<IdbInMemoryEvent>;
+  getAll: (storeName: string) => Promise<IdbInMemoryEvent>;
+  clear: (storeName: string) => Promise<IdbInMemoryEvent>;
+  close: () => void;
+}
+
+export function buildIdbInMemoryHandle(options: { stores?: string[] } = {}): IdbInMemoryHandle {
+  const storeNames = options.stores ?? ['projects', 'tags', 'undo'];
+  const stores: Record<string, IdbInMemoryStore> = {};
+  for (const name of storeNames) stores[name] = { name, data: new Map(), putCount: 0, getCount: 0, deleteCount: 0, clearCount: 0, size: 0 };
+  const events: IdbInMemoryEvent[] = [];
+  let totalOperations = 0;
+  function makeEvent(type: IdbInMemoryEvent['type'], store: string, extras: Partial<IdbInMemoryEvent> = {}): IdbInMemoryEvent {
+    return { type, store, timestamp: Date.now(), ...extras };
+  }
+  const handle: IdbInMemoryHandle = {
+    stores,
+    events,
+    isOpen: true,
+    supportsIdb: true,
+    get totalOperations() { return totalOperations; },
+    put: async (storeName, key, value) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      store.data.set(key, value);
+      store.putCount += 1;
+      store.size = store.data.size;
+      const event = makeEvent('put', storeName, { key, value });
+      events.push(event);
+      return event;
+    },
+    get: async (storeName, key) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      store.getCount += 1;
+      const value = store.data.get(key);
+      const event = makeEvent('get', storeName, { key, result: value });
+      events.push(event);
+      return event;
+    },
+    delete: async (storeName, key) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      store.deleteCount += 1;
+      store.data.delete(key);
+      store.size = store.data.size;
+      const event = makeEvent('delete', storeName, { key });
+      events.push(event);
+      return event;
+    },
+    count: async (storeName) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      const result = store.data.size;
+      const event = makeEvent('count', storeName, { result });
+      events.push(event);
+      return event;
+    },
+    getAll: async (storeName) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      const result = Array.from(store.data.entries()).map(([k, v]) => ({ key: k, value: v }));
+      const event = makeEvent('get', storeName, { result });
+      events.push(event);
+      return event;
+    },
+    clear: async (storeName) => {
+      totalOperations += 1;
+      const store = stores[storeName];
+      if (!store) throw new Error(`store ${storeName} not found`);
+      store.clearCount += 1;
+      store.data.clear();
+      store.size = 0;
+      const event = makeEvent('clear', storeName);
+      events.push(event);
+      return event;
+    },
+    close: () => { handle.isOpen = false; },
+  };
+  return handle;
+}
+
+export async function runIdbInMemoryOps(handle: IdbInMemoryHandle, operations: Array<{ kind: string; store: string; key?: string; value?: unknown }>): Promise<{ successCount: number; errorCount: number; events: IdbInMemoryEvent[] }> {
+  let successCount = 0;
+  let errorCount = 0;
+  const initialLength = handle.events.length;
+  for (const op of operations) {
+    try {
+      if (op.kind === 'put' && op.key !== undefined) await handle.put(op.store, op.key, op.value);
+      else if (op.kind === 'get' && op.key !== undefined) await handle.get(op.store, op.key);
+      else if (op.kind === 'delete' && op.key !== undefined) await handle.delete(op.store, op.key);
+      else if (op.kind === 'count') await handle.count(op.store);
+      else if (op.kind === 'getAll') await handle.getAll(op.store);
+      else if (op.kind === 'clear') await handle.clear(op.store);
+      successCount += 1;
+    } catch (err) {
+      errorCount += 1;
+    }
+  }
+  return { successCount, errorCount, events: handle.events.slice(initialLength) };
+}
 export interface IdbEvalCode {
   code: string;
   wrapperFnName: string;

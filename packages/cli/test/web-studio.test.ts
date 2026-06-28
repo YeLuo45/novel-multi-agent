@@ -96,6 +96,8 @@ import {
   buildIdbExecutorCode,
   parseIdbEvalError,
   simulateIdbEval,
+  buildIdbInMemoryHandle,
+  runIdbInMemoryOps,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1569,5 +1571,55 @@ describe('web-first studio models', () => {
     const noIdb = buildIdbExecutor({ operations: [], supportsIdb: false });
     const noIdbCode = buildIdbExecutorCode(noIdb);
     assert.equal(noIdbCode.ready, false);
+  });
+
+  it('builds V68 IDB in-memory handle with 3 stores putCount getCount size and supportsIdb true', () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects', 'tags', 'undo'] });
+    assert.equal(handle.isOpen, true);
+    assert.equal(handle.supportsIdb, true);
+    assert.equal(Object.keys(handle.stores).length, 3);
+    assert.equal(handle.stores['projects'].size, 0);
+    assert.equal(handle.stores['projects'].putCount, 0);
+    assert.equal(handle.totalOperations, 0);
+    assert.equal(handle.events.length, 0);
+  });
+
+  it('runs V68 IDB in-memory ops put get count getAll delete clear with event tracking', async () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects'] });
+    const ops = [
+      { kind: 'put', store: 'projects', key: 'p1', value: { x: 1 } },
+      { kind: 'put', store: 'projects', key: 'p2', value: { x: 2 } },
+      { kind: 'count', store: 'projects' },
+      { kind: 'get', store: 'projects', key: 'p1' },
+      { kind: 'getAll', store: 'projects' },
+      { kind: 'delete', store: 'projects', key: 'p2' },
+      { kind: 'clear', store: 'projects' },
+    ];
+    const result = await runIdbInMemoryOps(handle, ops);
+    assert.equal(result.successCount, 7);
+    assert.equal(result.errorCount, 0);
+    assert.equal(result.events.length, 7);
+    assert.equal(handle.stores['projects'].size, 0);
+    assert.equal(handle.stores['projects'].putCount, 2);
+    assert.equal(handle.stores['projects'].getCount, 1);
+    assert.equal(handle.stores['projects'].deleteCount, 1);
+    assert.equal(handle.stores['projects'].clearCount, 1);
+    assert.equal(handle.totalOperations, 7);
+    const putEvents = result.events.filter((e) => e.type === 'put');
+    assert.equal(putEvents.length, 2);
+    assert.equal(putEvents[0]?.key, 'p1');
+  });
+
+  it('handles V68 IDB in-memory errors when store not found', async () => {
+    const handle = buildIdbInMemoryHandle({ stores: ['projects'] });
+    const ops = [
+      { kind: 'put', store: 'nonexistent', key: 'p1', value: { x: 1 } },
+      { kind: 'put', store: 'projects', key: 'p2', value: { x: 2 } },
+    ];
+    const result = await runIdbInMemoryOps(handle, ops);
+    assert.equal(result.successCount, 1);
+    assert.equal(result.errorCount, 1);
+    assert.equal(handle.stores['projects'].putCount, 1);
+    assert.equal(handle.totalOperations, 2);
   });
 });

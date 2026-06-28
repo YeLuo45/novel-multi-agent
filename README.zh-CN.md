@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V68 IDB Mock browser-side（in-memory store + 事件 + 7 op 批量执行）
+
+- `buildIdbInMemoryHandle({stores})`：返回完整 IDB API 模拟（put/get/getAll/delete/count/clear/close），每 store 含 Map data + putCount/getCount/deleteCount/clearCount/size 计数器；所有 op 记录 `IdbInMemoryEvent{type, store, key?, value?, result?, timestamp}`；totalOperations getter 跟踪 op 总数。
+- `runIdbInMemoryOps(handle, ops)` async：顺序执行 ops 数组，成功/失败分别计数 + 错误不中断后续 op + 返回本次 slice events。
+- HTML 集成：3 个 inline 按钮（生成 handle / 批量 7 ops / 错误路径），从 library.list() 自动生成 ops；`totalOperations` 在错误路径中证明 continue-on-error 行为。
+- 关键修复：V67 patch 时误删 IdbEvalCode interface（前向声明 IdbInMemoryStore block），单独补回后通过。
+
 ## V67 IDB 真实 eval（浏览器 eval(planCode) + 错误回退 + 5 类错误识别）
 
 - `buildIdbExecutorCode(executor, {wrapperFnName})`：从 V58 executor 生成 `function runIdbExecutor(executor) { ... }` 可执行 JS 代码字符串，含 startTime/stepsCompleted/return IdbEvalResult 9 字段 + try/catch + dependencies list (`indexedDB`/`console`/`JSON`/`localStorage`)。
