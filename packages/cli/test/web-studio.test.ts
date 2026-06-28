@@ -102,6 +102,9 @@ import {
   planPersistenceBackup,
   planPersistenceRestore,
   computePersistenceChecksum,
+  buildBrowserEvalAdapter,
+  planBrowserEvalSteps,
+  simulateBrowserEval,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1684,5 +1687,45 @@ describe('web-first studio models', () => {
     const xor = computePersistenceChecksum(handle, 'simple-xor');
     assert.equal(xor.algorithm, 'simple-xor');
     assert.notEqual(xor.digest, fnv.digest);
+  });
+
+  it('builds V70 browser eval adapter with steps fallback key timeout and ready flag', () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor);
+    const adapter = buildBrowserEvalAdapter(evalCode, { fallbackStorageKey: 'novel-ma:fb', timeoutMs: 5000 });
+    assert.equal(adapter.target, 'browser');
+    assert.equal(adapter.fallbackStorageKey, 'novel-ma:fb');
+    assert.equal(adapter.timeoutMs, 5000);
+    assert.equal(adapter.fallbackEnabled, true);
+    assert.equal(adapter.ready, true);
+    assert.ok(adapter.steps.length >= 5);
+    assert.ok(adapter.steps.some((s) => s.includes('pre-check')));
+    assert.ok(adapter.steps.some((s) => s.includes('fallback check')));
+    assert.ok(adapter.steps.some((s) => s.includes('execute')));
+  });
+
+  it('plans V70 browser eval steps with index status pending success and duration', () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor);
+    const adapter = buildBrowserEvalAdapter(evalCode);
+    const steps = planBrowserEvalSteps(adapter);
+    assert.equal(steps.length, adapter.steps.length);
+    assert.equal(steps[0]?.status, 'success');
+    assert.equal(steps[1]?.status, 'pending');
+    assert.equal(steps[0]?.index, 1);
+  });
+
+  it('simulates V70 browser eval with mock outputs returning success timeline and ready flag', () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor);
+    const adapter = buildBrowserEvalAdapter(evalCode);
+    const timeline = simulateBrowserEval(adapter, ['check ok', 'storage ok', 'exec ok', 'await ok', 'fallback ok', 'return ok']);
+    assert.equal(timeline.totalSteps, adapter.steps.length);
+    assert.equal(timeline.successCount, adapter.steps.length);
+    assert.equal(timeline.failedCount, 0);
+    assert.equal(timeline.fallbackCount, 0);
+    assert.equal(timeline.ready, true);
+    assert.ok(timeline.steps.every((s) => s.status === 'success'));
+    assert.ok(timeline.steps.every((s) => s.durationMs >= 0));
   });
 });

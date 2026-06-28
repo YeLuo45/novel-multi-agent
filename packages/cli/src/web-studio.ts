@@ -606,6 +606,63 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface BrowserEvalAdapter {
+  evalCode: IdbEvalCode;
+  target: 'browser' | 'node';
+  fallbackEnabled: boolean;
+  fallbackStorageKey: string;
+  timeoutMs: number;
+  ready: boolean;
+  steps: string[];
+}
+
+export interface BrowserEvalStepResult {
+  index: number;
+  step: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'fallback';
+  durationMs: number;
+  errorMessage: string | null;
+}
+
+export interface BrowserEvalTimeline {
+  steps: BrowserEvalStepResult[];
+  totalSteps: number;
+  successCount: number;
+  failedCount: number;
+  fallbackCount: number;
+  totalDurationMs: number;
+  ready: boolean;
+}
+
+export function buildBrowserEvalAdapter(evalCode: IdbEvalCode, options: { fallbackStorageKey?: string; timeoutMs?: number } = {}): BrowserEvalAdapter {
+  const fallbackStorageKey = options.fallbackStorageKey ?? 'novel-ma:artifacts';
+  const timeoutMs = Math.max(1000, Math.min(60_000, options.timeoutMs ?? 10_000));
+  const steps = [
+    `pre-check: navigator.indexedDB available? (browser only)`,
+    `fallback check: typeof localStorage available? (browser only)`,
+    `execute evalCode.code via (new Function(code))(${fallbackStorageKey ? 'fallbackStorageKey' : ''})`,
+    `await IdbEvalResult (success + stepsCompleted + totalSteps)`,
+    `on error: write to ${fallbackStorageKey} via localStorage.setItem`,
+    `return { success: false, stepsCompleted: N, errorMessage, fallbackTriggered: true }`,
+  ];
+  return { evalCode, target: 'browser', fallbackEnabled: !!fallbackStorageKey, fallbackStorageKey, timeoutMs, ready: evalCode.ready, steps };
+}
+
+export function planBrowserEvalSteps(adapter: BrowserEvalAdapter): BrowserEvalStepResult[] {
+  return adapter.steps.map((step, index) => ({ index: index + 1, step, status: index === 0 ? 'success' : 'pending', durationMs: 0, errorMessage: null }));
+}
+
+export function simulateBrowserEval(adapter: BrowserEvalAdapter, mockOutputs: string[] = []): BrowserEvalTimeline {
+  const start = Date.now();
+  const results: BrowserEvalStepResult[] = adapter.steps.map((step, index) => {
+    const stepStart = Date.now();
+    const output = mockOutputs[index] ?? `step ${index + 1} ok`;
+    const status: BrowserEvalStepResult['status'] = index === 0 ? 'success' : index < mockOutputs.length ? 'success' : 'pending';
+    return { index: index + 1, step: `${step} → ${output}`, status, durationMs: Date.now() - stepStart, errorMessage: null };
+  });
+  const successCount = results.filter((r) => r.status === 'success').length;
+  return { steps: results, totalSteps: results.length, successCount, failedCount: 0, fallbackCount: 0, totalDurationMs: Date.now() - start, ready: adapter.ready };
+}
 export interface IdbPersistenceAdapter {
   handle: IdbInMemoryHandle;
   primaryStorage: 'localStorage' | 'indexedDB';

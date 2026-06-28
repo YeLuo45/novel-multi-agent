@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V70 浏览器端 eval 真实执行（BrowserEvalAdapter + 6 步骤 timeline）
+
+- `buildBrowserEvalAdapter(evalCode, {fallbackStorageKey, timeoutMs})`：包装 V67 eval code 为浏览器端执行器，6 步骤 (pre-check / fallback check / execute / await / on-error fallback / return result) + fallbackStorageKey 绑定。
+- `planBrowserEvalSteps(adapter)`：返回 `BrowserEvalStepResult[]` 含 index/step/status/durationMs/errorMessage 5 字段。
+- `simulateBrowserEval(adapter, mockOutputs)`：Node 端时间轴模拟，successCount/failedCount/fallbackCount/totalDurationMs + ready flag。
+- HTML 集成：3 个 inline 按钮（build/plan/simulate）；HTML 端可用 `new Function('fallbackStorageKey', evalCode.code)` 真实执行。
+
 ## V69 InMemory 真实持久化（双写 adapter + backup plan + restore plan + checksum）
 
 - `buildIdbPersistenceAdapter(handle, {primaryStorage, primaryKey, secondaryKey})`：包装 V68 in-memory handle 为持久化层，primary/secondary 双存储 + `getBytes()/getWritesLogged()` 方法 + `bytesWritten/writesLogged` getter（避免对象值捕获陷阱）。
