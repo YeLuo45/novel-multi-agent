@@ -606,6 +606,76 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface TuiScrollExecutionResult {
+  targetFound: boolean;
+  scrollIntoViewCalled: boolean;
+  smoothAnimated: boolean;
+  stepsApplied: number;
+  totalScrollY: number;
+  durationMs: number;
+  fallbackUsed: boolean;
+  errorMessage: string | null;
+}
+
+export interface TuiAnimationFrame {
+  index: number;
+  scrollY: number;
+  delayMs: number;
+  callback: string;
+}
+
+export interface TuiAnimationSchedule {
+  frames: TuiAnimationFrame[];
+  totalDurationMs: number;
+  scheduled: boolean;
+  ready: boolean;
+}
+
+export function runTuiScrollIntoView(result: TuiScrollIntoViewResult, mockDom: { querySelector?: (sel: string) => { scrollIntoView?: (opts: { behavior: string; block: string; inline: string }) => void; getBoundingClientRect?: () => { top: number } } | null; plan?: TuiSmoothScrollPlan } = {}): TuiScrollExecutionResult {
+  const start = Date.now();
+  let targetFound = false;
+  let scrollIntoViewCalled = false;
+  let smoothAnimated = false;
+  let stepsApplied = 0;
+  let totalScrollY = 0;
+  let fallbackUsed = false;
+  let errorMessage: string | null = null;
+  try {
+    const el = mockDom.querySelector?.(result.targetSelector) ?? null;
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ behavior: result.scrollOptions.behavior, block: result.scrollOptions.block, inline: result.scrollOptions.inline });
+      targetFound = true;
+      scrollIntoViewCalled = true;
+    } else {
+      fallbackUsed = true;
+    }
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+    fallbackUsed = true;
+  }
+  if (mockDom.plan) {
+    smoothAnimated = true;
+    for (const step of mockDom.plan.steps) {
+      totalScrollY += step.scrollY;
+      stepsApplied += 1;
+    }
+  }
+  return { targetFound, scrollIntoViewCalled, smoothAnimated, stepsApplied, totalScrollY, durationMs: Date.now() - start, fallbackUsed, errorMessage };
+}
+
+export function planTuiAnimation(plan: TuiSmoothScrollPlan, options: { frameIntervalMs?: number } = {}): TuiAnimationSchedule {
+  const frameIntervalMs = Math.max(10, Math.min(100, options.frameIntervalMs ?? plan.stepIntervalMs));
+  const frames: TuiAnimationFrame[] = plan.steps.map((step, index) => ({ index, scrollY: step.scrollY, delayMs: index * frameIntervalMs, callback: `setScrollY(${Math.round(step.scrollY)})` }));
+  const totalDurationMs = frames.length > 0 ? frames[frames.length - 1]?.delayMs ?? 0 : 0;
+  return { frames, totalDurationMs, scheduled: false, ready: plan.ready && frames.length > 0 };
+}
+
+export function buildTuiSectionElement(section: { id: string; title?: string }, options: { className?: string; tabIndex?: number; ariaLabel?: string } = {}): { tagName: 'section'; attributes: Record<string, string>; textContent: string } {
+  const className = options.className ?? 'tui-section';
+  const tabIndex = options.tabIndex ?? 0;
+  const ariaLabel = options.ariaLabel ?? section.title ?? section.id;
+  return { tagName: 'section', attributes: { id: `tui-section-${section.id}`, class: className, tabindex: String(tabIndex), role: 'tab', 'aria-label': ariaLabel }, textContent: section.title ?? section.id };
+}
 export interface DualWriteRunResult {
   primarySuccess: boolean;
   secondarySuccess: boolean;

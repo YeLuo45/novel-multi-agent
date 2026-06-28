@@ -120,6 +120,9 @@ import {
   runDualWrite,
   extractDualWriteError,
   planDualWriteRecovery,
+  runTuiScrollIntoView,
+  planTuiAnimation,
+  buildTuiSectionElement,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1987,5 +1990,55 @@ describe('web-first studio models', () => {
     const large = planPersistenceDualWrite(serializePersistencePayload(new Array(100_000).fill({ x: 'a'.repeat(50) })));
     const lr = planDualWriteRecovery(large, 1);
     assert.equal(lr.primaryRecoverable, false);
+  });
+
+  it('runs V76 TUI scrollIntoView with target found smooth animated and fallback paths', () => {
+    const sectionsList = [{ id: 'header' }, { id: 'V41' }, { id: 'V42' }];
+    const scrollPlan = buildTuiScrollPlan(sectionsList, 0, { containerHeight: 100, itemHeight: 30 });
+    const result = buildTuiScrollIntoView(scrollPlan, 2, { behavior: 'smooth', block: 'center' });
+    const mockEl = { scrollIntoViewCalls: [] as Array<unknown>, scrollIntoView(opts: { behavior: string; block: string; inline: string }) { this.scrollIntoViewCalls.push(opts); } };
+    const mockDom = { querySelector: (sel: string) => sel === '#tui-section-2' ? mockEl : null };
+    const exec = runTuiScrollIntoView(result, mockDom);
+    assert.equal(exec.targetFound, true);
+    assert.equal(exec.scrollIntoViewCalled, true);
+    assert.equal(exec.smoothAnimated, false);
+    assert.equal(exec.fallbackUsed, false);
+    assert.equal(exec.errorMessage, null);
+    assert.ok(exec.durationMs >= 0);
+    assert.equal(mockEl.scrollIntoViewCalls.length, 1);
+
+    const fallback = runTuiScrollIntoView(result, { querySelector: () => null });
+    assert.equal(fallback.targetFound, false);
+    assert.equal(fallback.fallbackUsed, true);
+
+    const smoothPlan = planTuiSmoothScroll(0, 200, 4, { stepIntervalMs: 30 });
+    const exec2 = runTuiScrollIntoView(result, { querySelector: () => mockEl, plan: smoothPlan });
+    assert.equal(exec2.smoothAnimated, true);
+    assert.equal(exec2.stepsApplied, 5);
+  });
+
+  it('plans V76 TUI animation with frames delayMs callback and total duration', () => {
+    const smoothPlan = planTuiSmoothScroll(0, 300, 3, { stepIntervalMs: 50 });
+    const schedule = planTuiAnimation(smoothPlan, { frameIntervalMs: 60 });
+    assert.equal(schedule.frames.length, 4);
+    assert.equal(schedule.frames[0]?.delayMs, 0);
+    assert.equal(schedule.frames[1]?.delayMs, 60);
+    assert.equal(schedule.frames[2]?.delayMs, 120);
+    assert.equal(schedule.frames[3]?.delayMs, 180);
+    assert.ok(schedule.frames.every((f) => f.callback.includes('setScrollY')));
+    assert.equal(schedule.totalDurationMs, 180);
+    assert.equal(schedule.scheduled, false);
+    assert.equal(schedule.ready, true);
+  });
+
+  it('builds V76 TUI section element with tag attributes tabIndex role ariaLabel and textContent', () => {
+    const el = buildTuiSectionElement({ id: 'V42', title: 'Interactive Panel' }, { className: 'tui-panel', tabIndex: 1, ariaLabel: 'V42 panel' });
+    assert.equal(el.tagName, 'section');
+    assert.equal(el.attributes['id'], 'tui-section-V42');
+    assert.equal(el.attributes['class'], 'tui-panel');
+    assert.equal(el.attributes['tabindex'], '1');
+    assert.equal(el.attributes['role'], 'tab');
+    assert.equal(el.attributes['aria-label'], 'V42 panel');
+    assert.equal(el.textContent, 'Interactive Panel');
   });
 });

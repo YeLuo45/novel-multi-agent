@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V76 TUI scrollIntoView 真实执行（runTuiScrollIntoView + animation frames + DOM 元素）
+
+- `runTuiScrollIntoView(result, mockDom)`：用 try/catch 真实调用 mockEl.scrollIntoView({behavior, block, inline})；mockDom 接受 querySelector + plan；返回 `TuiScrollExecutionResult{targetFound, scrollIntoViewCalled, smoothAnimated, stepsApplied, totalScrollY, durationMs, fallbackUsed, errorMessage}` 8 字段。
+- `planTuiAnimation(plan, {frameIntervalMs})`：从 V73 TuiSmoothScrollPlan 派生 frames 数组（每 frame 含 index/scrollY/delayMs/callback `setScrollY(X)`），delayMs = index * frameIntervalMs；frameIntervalMs clamp 10-100ms。
+- `buildTuiSectionElement(section, {className, tabIndex, ariaLabel})`：返回 `{tagName, attributes{id, class, tabindex, role: 'tab', aria-label}, textContent}`；HTML 端可 `Object.entries(attrs).map(([k,v]) => k + '="' + v + '"')` 直接生成 `<section>` 字符串。
+- HTML 集成：3 个 inline 按钮（scroll-run/anim-plan/section-build），scroll-run 用 mock element 真实调用 scrollIntoView + 显示可执行 JS 代码。
+
 ## V75 dual-write 真实执行（runDualWrite + 5 类错误 + 3 重试策略）
 
 - `runDualWrite(plan, mockRuntime)`：用 try/catch 真实执行 V74 primary/secondary write + readback；mockRuntime 接受 localStorage {setItem/getItem} 和 indexedDB；返回 `DualWriteRunResult{primarySuccess/secondarySuccess/readbackSuccess/Written/Matched/Error/durationMs/attempt}` 13 字段。
