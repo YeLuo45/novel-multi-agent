@@ -606,6 +606,161 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface BrowserDualWriteResult {
+  opened: boolean;
+  primaryWritten: boolean;
+  secondaryWritten: boolean;
+  readbackMatched: boolean;
+  primaryError: string | null;
+  secondaryError: string | null;
+  readbackError: string | null;
+  primaryDurationMs: number;
+  secondaryDurationMs: number;
+  readbackDurationMs: number;
+  totalDurationMs: number;
+  bytesWritten: number;
+  version: number;
+  ready: boolean;
+}
+
+export interface BrowserDualWriteValidation {
+  isBrowser: boolean;
+  hasIndexedDB: boolean;
+  hasLocalStorage: boolean;
+  ready: boolean;
+  warnings: string[];
+  featureSupport: { indexedDB: boolean; localStorage: boolean; structuredClone: boolean };
+}
+
+export interface BrowserDualWriteCode {
+  setupCode: string;
+  primaryWriteCode: string;
+  secondaryWriteCode: string;
+  readbackCode: string;
+  totalCode: string;
+  bytes: number;
+  ready: boolean;
+}
+
+export function validateBrowserDualWrite(): BrowserDualWriteValidation {
+  const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+  const hasIndexedDB = isBrowser && typeof window.indexedDB !== 'undefined';
+  const hasLocalStorage = isBrowser && typeof window.localStorage !== 'undefined';
+  const hasStructuredClone = (() => { try { return typeof globalThis.structuredClone === 'function'; } catch { return false; } })();
+  const warnings: string[] = [];
+  if (!isBrowser) warnings.push('not running in a browser environment');
+  if (!hasIndexedDB) warnings.push('indexedDB not available - IDB dual-write will be skipped');
+  if (!hasLocalStorage) warnings.push('localStorage not available - primary write will be skipped');
+  if (!structuredClone) warnings.push('structuredClone not available - data cloning may fail');
+  return {
+    isBrowser,
+    hasIndexedDB,
+    hasLocalStorage,
+    ready: hasIndexedDB || hasLocalStorage,
+    warnings,
+    featureSupport: { indexedDB: hasIndexedDB, localStorage: hasLocalStorage, structuredClone: hasStructuredClone },
+  };
+}
+
+export function buildBrowserDualWriteCode(plan: PersistenceDualWritePlan, payload: string, options: { version?: number } = {}): BrowserDualWriteCode {
+  const version = Math.max(1, Math.min(99, options.version ?? 1));
+  const setupCode = `const dbName = '${plan.primaryStorage === 'indexedDB' ? 'novel-ma' : 'novel-ma-2'}'; const req = indexedDB.open(dbName, ${version}); req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'key' }); }; req.onsuccess = () => { window.__novelMaDb = req.result; };`;
+  const primaryWriteCode = plan.primaryStorage === 'localStorage'
+    ? `localStorage.setItem('${plan.primaryKey}', ${'`'}${payload}${'`'})`
+    : `const tx1 = window.__novelMaDb.transaction('projects', 'readwrite'); tx1.objectStore('projects').put({ key: '${plan.primaryKey}', value: ${'`'}${payload}${'`'} }); tx1.oncomplete = () => {};`;
+  const secondaryWriteCode = plan.secondaryStorage === 'localStorage'
+    ? `localStorage.setItem('${plan.secondaryKey}', ${'`'}${payload}${'`'})`
+    : `const tx2 = window.__novelMaDb.transaction('projects', 'readwrite'); tx2.objectStore('projects').put({ key: '${plan.secondaryKey}', value: ${'`'}${payload}${'`'} }); tx2.oncomplete = () => {};`;
+  const readbackCode = plan.primaryStorage === 'localStorage'
+    ? `const back = localStorage.getItem('${plan.primaryKey}')`
+    : `const tx3 = window.__novelMaDb.transaction('projects', 'readonly'); const req3 = tx3.objectStore('projects').get('${plan.primaryKey}'); req3.onsuccess = () => { console.log(req3.result?.value); };`;
+  const totalCode = `${setupCode}\n${primaryWriteCode}\n${secondaryWriteCode}\n${readbackCode}`;
+  const bytes = totalCode.length * 2;
+  return { setupCode, primaryWriteCode, secondaryWriteCode, readbackCode, totalCode, bytes, ready: true };
+}
+
+export function runBrowserDualWrite(plan: PersistenceDualWritePlan, payload: string, mockBrowser: { indexedDB?: unknown; localStorage?: { setItem: (k: string, v: string) => void; getItem: (k: string) => string | null } } = {}): BrowserDualWriteResult {
+  const start = Date.now();
+  let opened = false;
+  let primaryWritten = false;
+  let secondaryWritten = false;
+  let readbackMatched = false;
+  let primaryError: string | null = null;
+  let secondaryError: string | null = null;
+  let readbackError: string | null = null;
+  let bytesWritten = 0;
+  let version = 1;
+  const primaryStart = Date.now();
+  try {
+    if (plan.primaryStorage === 'localStorage' && mockBrowser.localStorage) {
+      mockBrowser.localStorage.setItem(plan.primaryKey, payload);
+      primaryWritten = true;
+      bytesWritten += payload.length * 2;
+    } else if (plan.primaryStorage === 'indexedDB' && mockBrowser.indexedDB) {
+      const idb = mockBrowser.indexedDB as { transaction?: (s: string, m: string) => { objectStore: (n: string) => { put?: (v: unknown) => void } } };
+      if (idb.transaction) {
+        const tx = idb.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put?.({ key: plan.primaryKey, value: payload });
+        primaryWritten = true;
+        bytesWritten += payload.length * 2;
+        opened = true;
+      } else {
+        primaryError = 'indexedDB.transaction not available';
+      }
+    } else {
+      primaryError = 'no mock runtime available for primary';
+    }
+  } catch (e) {
+    primaryError = e instanceof Error ? e.message : String(e);
+  }
+  const primaryDurationMs = Date.now() - primaryStart;
+  const secondaryStart = Date.now();
+  try {
+    if (plan.secondaryStorage === 'localStorage' && mockBrowser.localStorage) {
+      mockBrowser.localStorage.setItem(plan.secondaryKey, payload);
+      secondaryWritten = true;
+      bytesWritten += payload.length * 2;
+    } else if (plan.secondaryStorage === 'indexedDB' && mockBrowser.indexedDB) {
+      const idb = mockBrowser.indexedDB as { transaction?: (s: string, m: string) => { objectStore: (n: string) => { put?: (v: unknown) => void } } };
+      if (idb.transaction) {
+        const tx = idb.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put?.({ key: plan.secondaryKey, value: payload });
+        secondaryWritten = true;
+        bytesWritten += payload.length * 2;
+      } else {
+        secondaryError = 'indexedDB.transaction not available';
+      }
+    } else {
+      secondaryError = 'no mock runtime available for secondary';
+    }
+  } catch (e) {
+    secondaryError = e instanceof Error ? e.message : String(e);
+  }
+  const secondaryDurationMs = Date.now() - secondaryStart;
+  const readbackStart = Date.now();
+  try {
+    if (plan.primaryStorage === 'localStorage' && mockBrowser.localStorage) {
+      const actual = mockBrowser.localStorage.getItem(plan.primaryKey);
+      readbackMatched = actual === payload;
+      if (!readbackMatched && !primaryError) readbackError = 'readback value mismatch';
+    } else if (plan.primaryStorage === 'indexedDB' && mockBrowser.indexedDB) {
+      const idb = mockBrowser.indexedDB as { transaction?: (s: string, m: string) => { objectStore: (n: string) => { get?: (k: string) => { result: unknown } } } };
+      if (idb.transaction) {
+        const tx = idb.transaction('projects', 'readonly');
+        const r = tx.objectStore('projects').get?.(plan.primaryKey);
+        const obj = r?.result as { value?: string } | undefined;
+        readbackMatched = obj?.value === payload;
+        if (!readbackMatched && !primaryError) readbackError = 'readback value mismatch';
+      } else {
+        readbackError = 'indexedDB.transaction not available';
+      }
+    }
+  } catch (e) {
+    readbackError = e instanceof Error ? e.message : String(e);
+  }
+  const readbackDurationMs = Date.now() - readbackStart;
+  return { opened, primaryWritten, secondaryWritten, readbackMatched, primaryError, secondaryError, readbackError, primaryDurationMs, secondaryDurationMs, readbackDurationMs, totalDurationMs: Date.now() - start, bytesWritten, version, ready: primaryWritten && secondaryWritten && readbackMatched };
+}
 export interface RealDualWriteRunResult {
   primaryWritten: boolean;
   secondaryWritten: boolean;

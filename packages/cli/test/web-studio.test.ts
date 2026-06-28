@@ -135,6 +135,9 @@ import {
   runRealDualWrite,
   extractRealDualWriteError,
   planRealDualWriteRecovery,
+  validateBrowserDualWrite,
+  buildBrowserDualWriteCode,
+  runBrowserDualWrite,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2319,5 +2322,56 @@ describe('web-first studio models', () => {
     const r3 = planRealDualWriteRecovery({ primaryWritten: false, secondaryWritten: false, readbackMatched: false, primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryError: 'fail', secondaryError: 'fail', readbackError: null, primaryDurationMs: 0, secondaryDurationMs: 0, readbackDurationMs: 0, totalDurationMs: 0, attempt: 1 }, 3);
     assert.equal(r3.nextDelayMs, 0);
     assert.ok(r3.strategies.includes('fallback-storage'));
+  });
+
+  it('validates V81 browser dual-write environment with indexedDB localStorage and structuredClone', () => {
+    const v = validateBrowserDualWrite();
+    assert.equal(typeof v.isBrowser, 'boolean');
+    assert.equal(typeof v.hasIndexedDB, 'boolean');
+    assert.equal(typeof v.hasLocalStorage, 'boolean');
+    assert.equal(typeof v.ready, 'boolean');
+    assert.equal(typeof v.featureSupport.indexedDB, 'boolean');
+    assert.equal(typeof v.featureSupport.localStorage, 'boolean');
+    assert.equal(typeof v.featureSupport.structuredClone, 'boolean');
+    assert.ok(v.warnings.length >= 0);
+  });
+
+  it('builds V81 browser dual-write code with setupCode primaryWriteCode secondaryWriteCode readbackCode totalCode bytes', () => {
+    const plan = planPersistenceDualWrite({ payloadJson: 'v81-payload', itemsCount: 1, totalBytes: 22, checksum: 'cs', format: 'json', generatedAt: '2026-06-28', compressionRatio: 1 }, { primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryKey: 'v81-pk', secondaryKey: 'v81-sk' });
+    const code = buildBrowserDualWriteCode(plan, 'v81-payload', { version: 2 });
+    assert.ok(code.setupCode.includes("dbName = 'novel-ma-2'"));
+    assert.ok(code.setupCode.includes('indexedDB.open(dbName'));
+    assert.ok(code.setupCode.includes('createObjectStore'));
+    assert.ok(code.primaryWriteCode.includes("localStorage.setItem('v81-pk'"));
+    assert.ok(code.secondaryWriteCode.includes('tx2.objectStore'));
+    assert.ok(code.readbackCode.includes("localStorage.getItem('v81-pk'"));
+    assert.ok(code.totalCode.includes('v81-payload'));
+    assert.ok(code.bytes > 0);
+    assert.equal(code.ready, true);
+  });
+
+  it('runs V81 browser dual-write with primary secondary readback bytesWritten and version', () => {
+    const plan = planPersistenceDualWrite({ payloadJson: 'browser-v81-payload', itemsCount: 1, totalBytes: 38, checksum: 'cs', format: 'json', generatedAt: '2026-06-28', compressionRatio: 1 }, { primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryKey: 'v81-pk', secondaryKey: 'v81-sk' });
+    const mockStore: Record<string, string> = {};
+    const mockBrowser = { indexedDB: { transaction: () => ({ objectStore: () => ({ put: (val: unknown) => { const v = val as { key: string; value: string }; mockStore[v.key] = v.value; }, get: (key: string) => ({ result: { key, value: mockStore[key] } }) }) }) }, localStorage: { setItem: (k: string, v: string) => { mockStore[k] = v; }, getItem: (k: string) => mockStore[k] ?? null } };
+    const result = runBrowserDualWrite(plan, 'browser-v81-payload', mockBrowser);
+    assert.equal(result.primaryWritten, true);
+    assert.equal(result.secondaryWritten, true);
+    assert.equal(result.readbackMatched, true);
+    assert.equal(result.primaryError, null);
+    assert.equal(result.secondaryError, null);
+    assert.equal(result.readbackError, null);
+    assert.ok(result.primaryDurationMs >= 0);
+    assert.ok(result.secondaryDurationMs >= 0);
+    assert.ok(result.readbackDurationMs >= 0);
+    assert.ok(result.totalDurationMs >= 0);
+    assert.ok(result.bytesWritten > 0);
+    assert.equal(result.version, 1);
+    assert.equal(result.ready, true);
+
+    const noMock = runBrowserDualWrite(plan, 'data', {});
+    assert.equal(noMock.primaryWritten, false);
+    assert.equal(noMock.secondaryWritten, false);
+    assert.equal(noMock.ready, false);
   });
 });

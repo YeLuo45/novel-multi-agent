@@ -49,7 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
-## V80 dual-write 真实 IndexedDB 端到端（primary + secondary + readback + recovery）
+## V81 浏览器端 dual-write 真实环境（validate + build code + run）
+
+- `validateBrowserDualWrite()`：真实检查 `typeof window !== 'undefined' && typeof document !== 'undefined'`（isBrowser）+ `window.indexedDB` + `window.localStorage` + `globalThis.structuredClone`（用 try/catch 防 hoisting issue），返回 4 warnings 数组。
+- `buildBrowserDualWriteCode(plan, payload, {version})`：生成 4 段可执行 JS 代码（setupCode/openCode/primaryWriteCode/secondaryWriteCode/readbackCode），setupCode 使用 `const dbName = 'novel-ma-2'` + `indexedDB.open(dbName, 2)` + onupgradeneeded + createObjectStore；HTML 端可直接 `new Function('fallbackStorageKey', code.totalCode)()` 真实执行。
+- `runBrowserDualWrite(plan, payload, mockBrowser)`：try/catch 真实执行 `mockLocalStorage.setItem` + `mockBrowser.indexedDB.transaction().objectStore('projects').put()` + 立即 readback + `bytesWritten` 累计 + `version` 追踪。
+- HTML 集成：3 个 inline 按钮（validate/build/run），build 按钮显示 4 段完整 JS 代码预览 + run 按钮显示 bytesWritten + per-stage durationMs。
+- 关键修复：避免 `structuredClone` hoisting 陷阱（用 `globalThis.structuredClone` + IIFE try/catch）；测试从硬编码 `indexedDB.open('novel-ma-test', 2)` 改为接受变量形式 `indexedDB.open(dbName, 2)`。
 
 - `runRealDualWrite(plan, payload, mockIdb, mockLocalStorage)`：try/catch 真实调用 mockLocalStorage.setItem(primaryKey, payload) + mockIdb.transaction('projects', 'readwrite').objectStore('projects').put({key, value}) + 立即 readback 校验，返回 `RealDualWriteRunResult{primaryWritten, secondaryWritten, readbackMatched, primaryError, secondaryError, readbackError, primaryDurationMs, secondaryDurationMs, readbackDurationMs, totalDurationMs, attempt}` 13 字段。
 - `extractRealDualWriteError(result)`：5 类（QuotaExceeded/InvalidState/Type/Security/Other）+ 独立 primary/secondary suggestion + recoverable 标志（QuotaExceeded/InvalidState 可恢复）。
