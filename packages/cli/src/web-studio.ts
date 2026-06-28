@@ -606,6 +606,62 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface TuiKeyEvent {
+  key: string;
+  sequence: string;
+  modifiers: { ctrl: boolean; shift: boolean; alt: boolean; meta: boolean };
+  vimKey: string;
+  matched: boolean;
+}
+
+export interface TuiKeyBindingResult {
+  event: TuiKeyEvent;
+  binding: TuiKeymap['bindings'][number] | null;
+  action: string;
+  matched: boolean;
+  consumed: boolean;
+}
+
+export interface TuiActiveSection {
+  sectionId: string;
+  index: number;
+  totalSections: number;
+  highlighted: boolean;
+  vimActions: string[];
+}
+
+function parseVimKey(key: string, shift: boolean, ctrl: boolean, alt: boolean, meta: boolean): string {
+  if (key === 'Escape') return 'Esc';
+  if (key === ' ') return 'Space';
+  if (key === 'ArrowDown') return 'Down';
+  if (key === 'ArrowUp') return 'Up';
+  if (key === 'ArrowLeft') return 'Left';
+  if (key === 'ArrowRight') return 'Right';
+  if (ctrl && key.length === 1) return 'Ctrl+' + key.toLowerCase();
+  if (meta && key.length === 1) return 'Cmd+' + key.toLowerCase();
+  if (alt && key.length === 1) return 'Alt+' + key.toLowerCase();
+  if (shift && key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+export function buildTuiKeyEvent(input: { key: string; shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }): TuiKeyEvent {
+  const shift = input.shift ?? false;
+  const ctrl = input.ctrl ?? false;
+  const alt = input.alt ?? false;
+  const meta = input.meta ?? false;
+  const vimKey = parseVimKey(input.key, shift, ctrl, alt, meta);
+  return { key: input.key, sequence: vimKey, modifiers: { ctrl, shift, alt, meta }, vimKey, matched: false };
+}
+
+export function planTuiKeyBindings(keymap: TuiKeymap, event: TuiKeyEvent): TuiKeyBindingResult {
+  const direct = keymap.bindings.find((b) => b.keys === event.vimKey || b.keys === event.key || b.keys.toLowerCase() === event.key.toLowerCase());
+  if (direct) return { event: { ...event, matched: true }, binding: direct, action: direct.action, matched: true, consumed: true };
+  return { event, binding: null, action: 'unknown', matched: false, consumed: false };
+}
+
+export function buildTuiActiveSection(sectionId: string, index: number, totalSections: number, vimActions: string[]): TuiActiveSection {
+  return { sectionId, index, totalSections, highlighted: true, vimActions };
+}
 export interface TuiKeymap {
   mode: 'normal' | 'insert' | 'command';
   bindings: Array<{ keys: string; action: string; description: string }>;

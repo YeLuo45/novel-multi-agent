@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V66 TUI 真实键盘绑定（document keydown → vimKey → planTuiKeyBindings）
+
+- `parseVimKey(key, shift, ctrl, alt, meta)` private：把 raw event.key 转成 vim 风格（如 'j', 'Ctrl+r', 'Cmd+k', 'Esc', 'Down'）。
+- `buildTuiKeyEvent(input)`：返回 `{key, sequence, modifiers{4}, vimKey, matched}`。
+- `planTuiKeyBindings(keymap, event)`：匹配 direct bindings（大小写不敏感），返回 `{event, binding, action, matched, consumed}`。
+- `buildTuiActiveSection(sectionId, index, totalSections, vimActions)`：返回 `{sectionId, index, totalSections, highlighted, vimActions[]}` 用于 UI 高亮。
+- HTML 集成：1 个真实 keydown 监听 + 1 个 27-section 列表 + 1 个按钮触发模拟 keydown；`active-mark ▶` 标记当前 section；input/textarea 内键不触发（避免破坏编辑）。
+
 ## V65 TUI 镜像交互（vim hjkl + 9 actions + 3 模式）
 
 - `buildTuiKeymap({mode, enableNavigation, enableActions})`：返回 `{mode: 'normal'|'insert'|'command', bindings[9], enabled}`，含 j/k/gg/G/Enter (navigation) + q/?/:/i (actions)。

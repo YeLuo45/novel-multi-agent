@@ -90,6 +90,9 @@ import {
   buildTuiKeymap,
   planTuiNavigate,
   buildTuiCommands,
+  buildTuiKeyEvent,
+  planTuiKeyBindings,
+  buildTuiActiveSection,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1453,5 +1456,58 @@ describe('web-first studio models', () => {
     assert.ok(commands.actionKeys.includes('q'));
     assert.ok(commands.actionKeys.includes('?'));
     assert.equal(commands.ready, true);
+  });
+
+  it('builds V66 TUI key event from raw key with ctrl/shift/alt meta modifiers', () => {
+    const plain = buildTuiKeyEvent({ key: 'j' });
+    assert.equal(plain.vimKey, 'j');
+    assert.equal(plain.modifiers.ctrl, false);
+    const upper = buildTuiKeyEvent({ key: 'G' });
+    assert.equal(upper.vimKey, 'G');
+    const ctrl = buildTuiKeyEvent({ key: 'r', ctrl: true });
+    assert.equal(ctrl.vimKey, 'Ctrl+r');
+    const esc = buildTuiKeyEvent({ key: 'Escape' });
+    assert.equal(esc.vimKey, 'Esc');
+    const arrow = buildTuiKeyEvent({ key: 'ArrowDown' });
+    assert.equal(arrow.vimKey, 'Down');
+    const enter = buildTuiKeyEvent({ key: 'Enter' });
+    assert.equal(enter.vimKey, 'Enter');
+    const meta = buildTuiKeyEvent({ key: 'k', meta: true });
+    assert.equal(meta.vimKey, 'Cmd+k');
+  });
+
+  it('plans V66 TUI key bindings matching direct keys including case-insensitive Enter and g', () => {
+    const keymap = buildTuiKeymap();
+    const jEvent = buildTuiKeyEvent({ key: 'j' });
+    const jMatch = planTuiKeyBindings(keymap, jEvent);
+    assert.equal(jMatch.matched, true);
+    assert.equal(jMatch.action, 'down');
+    assert.equal(jMatch.consumed, true);
+    assert.equal(jMatch.event.vimKey, 'j');
+
+    const kEvent = buildTuiKeyEvent({ key: 'k' });
+    const kMatch = planTuiKeyBindings(keymap, kEvent);
+    assert.equal(kMatch.action, 'up');
+
+    const enterEvent = buildTuiKeyEvent({ key: 'Enter' });
+    const enterMatch = planTuiKeyBindings(keymap, enterEvent);
+    assert.equal(enterMatch.matched, true);
+    assert.equal(enterMatch.action, 'enter');
+
+    const xEvent = buildTuiKeyEvent({ key: 'x' });
+    const xMatch = planTuiKeyBindings(keymap, xEvent);
+    assert.equal(xMatch.matched, false);
+    assert.equal(xMatch.consumed, false);
+  });
+
+  it('builds V66 TUI active section with index total highlighted and vim actions list', () => {
+    const section = buildTuiActiveSection('V41', 1, 18, ['j', 'k', 'gg', 'G', 'Enter']);
+    assert.equal(section.sectionId, 'V41');
+    assert.equal(section.index, 1);
+    assert.equal(section.totalSections, 18);
+    assert.equal(section.highlighted, true);
+    assert.equal(section.vimActions.length, 5);
+    assert.ok(section.vimActions.includes('gg'));
+    assert.ok(section.vimActions.includes('Enter'));
   });
 });
