@@ -606,6 +606,63 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface BrowserEvalRunResult {
+  success: boolean;
+  stepsCompleted: number;
+  totalSteps: number;
+  errorMessage: string | null;
+  errorStep: number | null;
+  fallbackTriggered: boolean;
+  fallbackStorageKey: string;
+  durationMs: number;
+  outputPreview: string;
+  stackTrace: string | null;
+}
+
+export interface BrowserEvalRetryPlan {
+  attempt: number;
+  maxAttempts: number;
+  nextDelayMs: number;
+  strategies: Array<'retry-immediate' | 'retry-after-backoff' | 'fallback-to-storage' | 'abort'>;
+  ready: boolean;
+}
+
+export function runBrowserEval(adapter: BrowserEvalAdapter, mockRuntime: { indexedDB?: unknown; localStorage?: unknown; navigator?: { serviceWorker?: unknown } } = {}): BrowserEvalRunResult {
+  const start = Date.now();
+  if (!adapter.ready) {
+    return { success: false, stepsCompleted: 0, totalSteps: adapter.steps.length, errorMessage: 'adapter not ready', errorStep: 0, fallbackTriggered: false, fallbackStorageKey: adapter.fallbackStorageKey, durationMs: Date.now() - start, outputPreview: '', stackTrace: null };
+  }
+  try {
+    if (!mockRuntime.indexedDB && adapter.target === 'browser') {
+      throw new Error('IndexedDB not available in runtime');
+    }
+    const fn = new Function('fallbackStorageKey', adapter.evalCode.code);
+    const result = fn(adapter.fallbackStorageKey);
+    return { success: true, stepsCompleted: adapter.steps.length, totalSteps: adapter.steps.length, errorMessage: null, errorStep: null, fallbackTriggered: false, fallbackStorageKey: adapter.fallbackStorageKey, durationMs: Date.now() - start, outputPreview: typeof result === 'string' ? result : 'ok', stackTrace: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack ?? null : null;
+    return { success: false, stepsCompleted: 0, totalSteps: adapter.steps.length, errorMessage: message, errorStep: 1, fallbackTriggered: !!adapter.fallbackStorageKey, fallbackStorageKey: adapter.fallbackStorageKey, durationMs: Date.now() - start, outputPreview: '', stackTrace: stack };
+  }
+}
+
+export function extractBrowserEvalError(result: BrowserEvalRunResult): { category: 'QuotaExceeded' | 'InvalidState' | 'Syntax' | 'Type' | 'Reference' | 'Other'; message: string; suggestion: string } {
+  const msg = result.errorMessage ?? '';
+  if (/quotaexceeded|quota/i.test(msg)) return { category: 'QuotaExceeded', message: msg, suggestion: '清理旧数据或降级到 localStorage' };
+  if (/invalidstate/i.test(msg)) return { category: 'InvalidState', message: msg, suggestion: '关闭并重新打开数据库连接' };
+  if (/syntax/i.test(msg)) return { category: 'Syntax', message: msg, suggestion: '检查 executor code 生成逻辑' };
+  if (/type/i.test(msg)) return { category: 'Type', message: msg, suggestion: '检查 stores/operations 类型' };
+  if (/reference/i.test(msg)) return { category: 'Reference', message: msg, suggestion: '检查 exports/imports' };
+  return { category: 'Other', message: msg, suggestion: '查看 stackTrace' };
+}
+
+export function planBrowserEvalRetry(adapter: BrowserEvalAdapter, attempt: number, options: { maxAttempts?: number } = {}): BrowserEvalRetryPlan {
+  const maxAttempts = Math.max(1, Math.min(10, options.maxAttempts ?? 3));
+  const current = Math.max(1, Math.min(maxAttempts, attempt));
+  const nextDelayMs = current >= maxAttempts ? 0 : Math.min(30_000, 100 * Math.pow(2, current));
+  const strategies: BrowserEvalRetryPlan['strategies'] = current >= maxAttempts ? ['fallback-to-storage', 'abort'] : current === 1 ? ['retry-immediate', 'retry-after-backoff', 'fallback-to-storage'] : ['retry-after-backoff', 'fallback-to-storage'];
+  return { attempt: current, maxAttempts, nextDelayMs, strategies, ready: adapter.ready };
+}
 export interface TuiSectionVisual {
   sectionId: string;
   index: number;

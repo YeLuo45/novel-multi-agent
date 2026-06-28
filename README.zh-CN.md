@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V72 Eval HTML 真实运行（new Function + try/catch + 5 类错误分类 + 重试）
+
+- `runBrowserEval(adapter, mockRuntime)`：用 `new Function('fallbackStorageKey', evalCode.code)` 真实执行 V70 wrapper code，含 try/catch + 5 步错误捕获 + IndexedDB 可用性检查 + fallbackStorageKey 注入。
+- `extractBrowserEvalError(result)`：识别 6 类错误 (QuotaExceeded/InvalidState/Syntax/Type/Reference/Other) + 对应 suggestion（清理数据 / 关闭连接 / 检查 code / 检查类型 / 检查 imports / 看 stackTrace）。
+- `planBrowserEvalRetry(adapter, attempt, {maxAttempts})`：指数退避 (100 * 2^attempt ms) + 3 策略 (retry-immediate / retry-after-backoff / fallback-to-storage) + maxAttempts 3 默认 (1-10)。
+- HTML 集成：3 个 inline 按钮（run/error/retry），从 library.list() 自动生成 1 artifact + 显示 stackTrace 前 400 字符。
+
 ## V71 TUI 视觉高亮（active ▶ / scroll plan / palette + border style）
 
 - `buildTuiSectionVisual(sectionId, index, totalSections, activeIndex)`：返回 `TuiSectionVisual{isActive, isFirst, isLast, icon, accentColor, borderStyle, scrollOffset, badge}` 10 字段；active ▶ / first ● / last ○ / other ·，borderStyle active=double/first=solid/last=dashed/other=dotted。

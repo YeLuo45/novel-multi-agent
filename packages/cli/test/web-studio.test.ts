@@ -108,6 +108,9 @@ import {
   buildTuiSectionVisual,
   planTuiHighlight,
   buildTuiScrollPlan,
+  runBrowserEval,
+  extractBrowserEvalError,
+  planBrowserEvalRetry,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1780,5 +1783,54 @@ describe('web-first studio models', () => {
     assert.equal(plan.paddingTop, 8);
     assert.equal(plan.paddingBottom, 8);
     assert.equal(plan.ready, true);
+  });
+
+  it('runs V72 browser eval with new Function + try/catch returning success or fallback result', () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor, { wrapperFnName: 'runForV72' });
+    const adapter = buildBrowserEvalAdapter(evalCode, { fallbackStorageKey: 'novel-ma:fb' });
+    const result = runBrowserEval(adapter, { indexedDB: {}, localStorage: {} });
+    assert.equal(typeof result.success, 'boolean');
+    assert.equal(typeof result.stepsCompleted, 'number');
+    assert.equal(result.totalSteps, adapter.steps.length);
+    assert.equal(result.fallbackStorageKey, 'novel-ma:fb');
+    assert.ok(result.durationMs >= 0);
+  });
+
+  it('extracts V72 browser eval error info with category suggestion for 5 error types', () => {
+    const mkResult = (msg: string | null): BrowserEvalRunResult => ({ success: false, stepsCompleted: 0, totalSteps: 3, errorMessage: msg, errorStep: 1, fallbackTriggered: false, fallbackStorageKey: 'k', durationMs: 0, outputPreview: '', stackTrace: null });
+    const quota = extractBrowserEvalError(mkResult('QuotaExceededError: storage full'));
+    assert.equal(quota.category, 'QuotaExceeded');
+    assert.ok(quota.suggestion.includes('降级'));
+    const invalid = extractBrowserEvalError(mkResult('InvalidStateError: connection closed'));
+    assert.equal(invalid.category, 'InvalidState');
+    const syntax = extractBrowserEvalError(mkResult('SyntaxError: unexpected token'));
+    assert.equal(syntax.category, 'Syntax');
+    const type = extractBrowserEvalError(mkResult('TypeError: undefined'));
+    assert.equal(type.category, 'Type');
+    const ref = extractBrowserEvalError(mkResult('ReferenceError: x not defined'));
+    assert.equal(ref.category, 'Reference');
+    const other = extractBrowserEvalError(mkResult('something weird'));
+    assert.equal(other.category, 'Other');
+  });
+
+  it('plans V72 browser eval retry with attempt delay and strategies', () => {
+    const executor = buildIdbExecutor({ operations: [], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor);
+    const adapter = buildBrowserEvalAdapter(evalCode);
+    const r1 = planBrowserEvalRetry(adapter, 1);
+    assert.equal(r1.attempt, 1);
+    assert.equal(r1.maxAttempts, 3);
+    assert.equal(r1.nextDelayMs, 200);
+    assert.ok(r1.strategies.includes('retry-immediate'));
+
+    const r3 = planBrowserEvalRetry(adapter, 3);
+    assert.equal(r3.nextDelayMs, 0);
+    assert.ok(r3.strategies.includes('fallback-to-storage'));
+
+    const r5 = planBrowserEvalRetry(adapter, 5, { maxAttempts: 10 });
+    assert.equal(r5.maxAttempts, 10);
+    assert.equal(r5.attempt, 5);
+    assert.ok(r5.nextDelayMs >= 0);
   });
 });
