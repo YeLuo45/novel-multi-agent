@@ -606,6 +606,68 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface IdbEvalCode {
+  code: string;
+  wrapperFnName: string;
+  stepCount: number;
+  dependencies: string[];
+  bytes: number;
+  ready: boolean;
+}
+
+export interface IdbEvalResult {
+  success: boolean;
+  stepsCompleted: number;
+  totalSteps: number;
+  errorMessage: string | null;
+  errorStep: number | null;
+  fallbackTriggered: boolean;
+  durationMs: number;
+  outputPreview: string;
+}
+
+export interface IdbEvalErrorInfo {
+  errorType: 'QuotaExceededError' | 'InvalidStateError' | 'NotFoundError' | 'SyntaxError' | 'Unknown';
+  message: string;
+  step: number | null;
+  recoverable: boolean;
+  fallbackStorageKey: string;
+  userMessage: string;
+}
+
+export function buildIdbExecutorCode(executor: IdbExecutor, options: { wrapperFnName?: string } = {}): IdbEvalCode {
+  const fnName = options.wrapperFnName ?? 'runIdbExecutor';
+  const dependencies = ['indexedDB', 'console', 'JSON', 'localStorage'];
+  const steps = executor.steps.map((step) => `    try { ${step.code}; stepsCompleted = ${step.index}; } catch (err) { console.error('[' + stepPrefix + '] step ${step.index} failed:', err); return { success: false, stepsCompleted: ${step.index}, totalSteps: ${executor.totalSteps}, errorMessage: String(err), errorStep: ${step.index}, fallbackTriggered: true, durationMs: Date.now() - startTime, outputPreview: '' }; }`).join('\n');
+  const code = `function ${fnName}(executor) {
+  const stepPrefix = 'IDB';
+  const startTime = Date.now();
+  let stepsCompleted = 0;
+  try {
+${executor.steps.map((step) => `    ${step.code}; stepsCompleted = ${step.index};`).join('\n')}
+    return { success: true, stepsCompleted: ${executor.totalSteps}, totalSteps: ${executor.totalSteps}, errorMessage: null, errorStep: null, fallbackTriggered: false, durationMs: Date.now() - startTime, outputPreview: 'ok ' + stepsCompleted + '/' + ${executor.totalSteps} };
+  } catch (err) {
+    return { success: false, stepsCompleted, totalSteps: ${executor.totalSteps}, errorMessage: String(err), errorStep: stepsCompleted, fallbackTriggered: true, durationMs: Date.now() - startTime, outputPreview: '' };
+  }
+}
+${fnName};`;
+  return { code, wrapperFnName: fnName, stepCount: executor.totalSteps, dependencies, bytes: code.length, ready: executor.ready };
+}
+
+export function parseIdbEvalError(stderr: string, step: number | null = null): IdbEvalErrorInfo {
+  const lower = stderr.toLowerCase();
+  if (lower.includes('quotaexceeded')) return { errorType: 'QuotaExceededError', message: stderr, step, recoverable: true, fallbackStorageKey: 'novel-ma:artifacts', userMessage: '存储配额超限，已降级到 localStorage' };
+  if (lower.includes('invalidstate')) return { errorType: 'InvalidStateError', message: stderr, step, recoverable: true, fallbackStorageKey: 'novel-ma:artifacts', userMessage: '数据库状态无效，已降级到 localStorage' };
+  if (lower.includes('notfound')) return { errorType: 'NotFoundError', message: stderr, step, recoverable: false, fallbackStorageKey: 'novel-ma:artifacts', userMessage: '数据库未找到' };
+  if (lower.includes('syntax')) return { errorType: 'SyntaxError', message: stderr, step, recoverable: false, fallbackStorageKey: 'novel-ma:artifacts', userMessage: '代码语法错误' };
+  return { errorType: 'Unknown', message: stderr, step, recoverable: false, fallbackStorageKey: 'novel-ma:artifacts', userMessage: '未知错误' };
+}
+
+export function simulateIdbEval(evalCode: IdbEvalCode, mockOutput: string = 'mock ok'): IdbEvalResult {
+  const start = Date.now();
+  if (!evalCode.ready) return { success: false, stepsCompleted: 0, totalSteps: evalCode.stepCount, errorMessage: 'executor not ready', errorStep: 0, fallbackTriggered: false, durationMs: Date.now() - start, outputPreview: '' };
+  return { success: true, stepsCompleted: evalCode.stepCount, totalSteps: evalCode.stepCount, errorMessage: null, errorStep: null, fallbackTriggered: false, durationMs: Date.now() - start, outputPreview: mockOutput };
+}
 export interface TuiKeyEvent {
   key: string;
   sequence: string;

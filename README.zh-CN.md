@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V67 IDB 真实 eval（浏览器 eval(planCode) + 错误回退 + 5 类错误识别）
+
+- `buildIdbExecutorCode(executor, {wrapperFnName})`：从 V58 executor 生成 `function runIdbExecutor(executor) { ... }` 可执行 JS 代码字符串，含 startTime/stepsCompleted/return IdbEvalResult 9 字段 + try/catch + dependencies list (`indexedDB`/`console`/`JSON`/`localStorage`)。
+- `parseIdbEvalError(stderr, step?)`：识别 5 类 IDB 错误 → `IdbEvalErrorInfo{errorType, message, step, recoverable, fallbackStorageKey, userMessage}`；`QuotaExceededError`/`InvalidStateError` 可恢复降级到 localStorage，`NotFoundError`/`SyntaxError` 不可恢复。
+- `simulateIdbEval(evalCode, mockOutput)`：Node 端同步执行 mock，返回 `IdbEvalResult` (success/stepsCompleted/totalSteps/errorMessage/errorStep/fallbackTriggered/durationMs/outputPreview 8 字段)；HTML 端可用 `eval(evalCode.code)` 真实执行。
+- HTML 集成：3 个按钮（生成 eval 代码 / Node 端 simulate / 解析错误），从 library.list() 自动生成 ops。
+
 ## V66 TUI 真实键盘绑定（document keydown → vimKey → planTuiKeyBindings）
 
 - `parseVimKey(key, shift, ctrl, alt, meta)` private：把 raw event.key 转成 vim 风格（如 'j', 'Ctrl+r', 'Cmd+k', 'Esc', 'Down'）。

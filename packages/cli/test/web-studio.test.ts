@@ -93,6 +93,9 @@ import {
   buildTuiKeyEvent,
   planTuiKeyBindings,
   buildTuiActiveSection,
+  buildIdbExecutorCode,
+  parseIdbEvalError,
+  simulateIdbEval,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1509,5 +1512,62 @@ describe('web-first studio models', () => {
     assert.equal(section.vimActions.length, 5);
     assert.ok(section.vimActions.includes('gg'));
     assert.ok(section.vimActions.includes('Enter'));
+  });
+
+  it('builds V67 IDB executor code string with steps wrapper function and dependencies list', () => {
+    const executor = buildIdbExecutor({
+      operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }, { kind: 'count', store: 'projects', expect: 'count' }],
+      supportsIdb: true,
+    });
+    const evalCode = buildIdbExecutorCode(executor, { wrapperFnName: 'runMyIdb' });
+    assert.equal(evalCode.wrapperFnName, 'runMyIdb');
+    assert.ok(evalCode.code.includes('function runMyIdb'));
+    assert.ok(evalCode.code.includes('stepsCompleted ='));
+    assert.ok(evalCode.code.includes('return { success: true'));
+    assert.ok(evalCode.code.includes('return { success: false'));
+    assert.equal(evalCode.stepCount, executor.totalSteps);
+    assert.equal(evalCode.ready, true);
+    assert.ok(evalCode.bytes > 100);
+    assert.ok(evalCode.dependencies.includes('indexedDB'));
+    assert.ok(evalCode.dependencies.includes('console'));
+  });
+
+  it('parses V67 IDB eval error info with type recoverable fallback key and user message', () => {
+    const quota = parseIdbEvalError('QuotaExceededError: storage full', 3);
+    assert.equal(quota.errorType, 'QuotaExceededError');
+    assert.equal(quota.step, 3);
+    assert.equal(quota.recoverable, true);
+    assert.equal(quota.fallbackStorageKey, 'novel-ma:artifacts');
+    assert.ok(quota.userMessage.includes('存储配额'));
+
+    const invalidState = parseIdbEvalError('InvalidStateError: connection closed', 2);
+    assert.equal(invalidState.errorType, 'InvalidStateError');
+    assert.equal(invalidState.recoverable, true);
+
+    const notFound = parseIdbEvalError('NotFoundError: db not found', 1);
+    assert.equal(notFound.recoverable, false);
+
+    const syntax = parseIdbEvalError('SyntaxError: unexpected token', 0);
+    assert.equal(syntax.errorType, 'SyntaxError');
+
+    const unknown = parseIdbEvalError('something weird happened');
+    assert.equal(unknown.errorType, 'Unknown');
+    assert.equal(unknown.recoverable, false);
+  });
+
+  it('simulates V67 IDB eval with mock output returning success result and total steps', () => {
+    const executor = buildIdbExecutor({ operations: [{ kind: 'put', store: 'projects', key: 'p1', value: { x: 1 }, expect: 'none' }], supportsIdb: true });
+    const evalCode = buildIdbExecutorCode(executor);
+    const result = simulateIdbEval(evalCode, 'mock completed 1 steps');
+    assert.equal(result.success, true);
+    assert.equal(result.stepsCompleted, evalCode.stepCount);
+    assert.equal(result.totalSteps, evalCode.stepCount);
+    assert.equal(result.errorMessage, null);
+    assert.equal(result.fallbackTriggered, false);
+    assert.ok(result.outputPreview.includes('mock'));
+
+    const noIdb = buildIdbExecutor({ operations: [], supportsIdb: false });
+    const noIdbCode = buildIdbExecutorCode(noIdb);
+    assert.equal(noIdbCode.ready, false);
   });
 });
