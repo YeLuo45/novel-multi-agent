@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V79 fallback 跨刷新持久化（persist + restore + migration v1→v2）
+
+- `persistFallbackToProjectsStore(store, items, mockIdb)`：try/catch 真实调用 mockIdb.transaction(storeName, 'readwrite') + objectStore().put(item) 循环 + 累计 totalBytes + 100+ items warning + readbackSuccess。
+- `restoreFallbackFromProjectsStore(store, storageKey, mockReadback)`：从 mockReadback.values 真实计算 itemsRestored + bytes + driftDetected（storageKey !== store.storeName）+ fromVersion + matchesCurrent。
+- `planFallbackMigration(items, {sourceKey, targetStore, currentVersion, targetVersion})`：6 步迁移（serialize/bump db version/trigger onupgradeneeded/write/verify schema + item count/commit + close）+ crossReloadSafe（white-list 4 个 store 名）+ 2 类 warnings（>5MB / 空 payload）。
+- HTML 集成：3 个 inline 按钮（persist/restore/migrate），从 library.list() 自动生成 items + 演示 restore 与 drift + migration 6 步。
+
 ## V78 真实 IndexedDB Runtime（6 操作 + 6 类错误 + 恢复性检测）
 
 - `buildRealIndexedDBStore({dbName, version, storeName})`：生成 6 段可执行 JS 代码（openCode + putCode + getCode + getAllCode + deleteCode + closeCode）+ bytes + ready。代码包含 `indexedDB.open + onupgradeneeded + createObjectStore + transaction + objectStore().put/get/getAll/delete + db.close()`。

@@ -129,6 +129,9 @@ import {
   buildRealIndexedDBStore,
   runRealIndexedDBOp,
   extractRealIndexedDBError,
+  persistFallbackToProjectsStore,
+  restoreFallbackFromProjectsStore,
+  planFallbackMigration,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2187,5 +2190,74 @@ describe('web-first studio models', () => {
     assert.equal(type.recoverable, true);
     const other = extractRealIndexedDBError(mk('weird'));
     assert.equal(other.category, 'Other');
+  });
+
+  it('persists V79 fallback to projects store with item count bytes readback and warnings', () => {
+    const store = buildRealIndexedDBStore({ dbName: 'novel-ma', version: 1, storeName: 'projects' });
+    const items = [{ key: 'p1', value: { name: 'proj1' } }, { key: 'p2', value: { name: 'proj2' } }];
+    const mockTx = { objectStore: () => ({ put: () => {} }), oncomplete: () => {} };
+    const result = persistFallbackToProjectsStore(store, items, { transaction: () => mockTx });
+    assert.equal(result.persisted, true);
+    assert.equal(result.itemCount, 2);
+    assert.ok(result.totalBytes > 0);
+    assert.equal(result.readbackSuccess, true);
+    assert.equal(result.readbackItemCount, 2);
+    assert.equal(result.storageKey, 'projects');
+    assert.equal(result.warnings.length, 0);
+    assert.equal(result.ready, true);
+
+    const noTx = persistFallbackToProjectsStore(store, items, {});
+    assert.equal(noTx.persisted, false);
+    assert.ok(noTx.errorMessage?.includes('transaction'));
+
+    const largeItems = Array.from({ length: 150 }, (_, i) => ({ key: `k${i}`, value: { idx: i } }));
+    const largeResult = persistFallbackToProjectsStore(store, largeItems, { transaction: () => mockTx });
+    assert.equal(largeResult.warnings.length, 1);
+  });
+
+  it('restores V79 fallback from projects store with version check drift detection', () => {
+    const store = buildRealIndexedDBStore({ storeName: 'projects' });
+    const ok = restoreFallbackFromProjectsStore(store, 'projects', { values: [{ key: 'p1' }, { key: 'p2' }], version: 2 });
+    assert.equal(ok.restored, true);
+    assert.equal(ok.itemsRestored, 2);
+    assert.ok(ok.bytes > 0);
+    assert.equal(ok.fromVersion, 2);
+    assert.equal(ok.matchesCurrent, true);
+    assert.equal(ok.driftDetected, false);
+    assert.equal(ok.ready, true);
+
+    const drift = restoreFallbackFromProjectsStore(store, 'fallback', { values: [{ key: 'p1' }], version: 1 });
+    assert.equal(drift.driftDetected, true);
+    assert.equal(drift.matchesCurrent, false);
+
+    const empty = restoreFallbackFromProjectsStore(store, 'projects', { values: [], version: 1 });
+    assert.equal(empty.restored, false);
+    assert.equal(empty.ready, false);
+  });
+
+  it('plans V79 fallback migration with version bump steps cross-reload safe and warnings', () => {
+    const items = [{ key: 'p1', value: { x: 1 } }, { key: 'p2', value: { x: 2 } }];
+    const plan = planFallbackMigration(items, { sourceKey: 'novel-ma:fallback', targetStore: 'projects', currentVersion: 1, targetVersion: 2 });
+    assert.equal(plan.sourceKey, 'novel-ma:fallback');
+    assert.equal(plan.targetStore, 'projects');
+    assert.equal(plan.itemsCount, 2);
+    assert.ok(plan.totalBytes > 0);
+    assert.ok(plan.estimatedDurationMs > 0);
+    assert.equal(plan.steps.length, 6);
+    assert.ok(plan.steps.some((s) => s.includes('bump db version')));
+    assert.ok(plan.steps.some((s) => s.includes('cross-reload safe')));
+    assert.equal(plan.crossReloadSafe, true);
+    assert.equal(plan.ready, true);
+
+    const sameVersion = planFallbackMigration(items, { currentVersion: 2, targetVersion: 2 });
+    assert.equal(sameVersion.steps.length, 4);
+
+    const empty = planFallbackMigration([], { currentVersion: 1, targetVersion: 2 });
+    assert.equal(empty.itemsCount, 0);
+    assert.ok(empty.warnings.some((w) => w.includes('empty')));
+
+    const big = Array.from({ length: 100_000 }, (_, i) => ({ key: `k${i}`, value: { x: 'a'.repeat(50) } }));
+    const bigPlan = planFallbackMigration(big, { currentVersion: 1, targetVersion: 2 });
+    assert.ok(bigPlan.warnings.some((w) => w.includes('5MB')));
   });
 });

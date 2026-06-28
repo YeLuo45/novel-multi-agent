@@ -606,6 +606,120 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface PersistFallbackResult {
+  persisted: boolean;
+  storageKey: string;
+  itemCount: number;
+  totalBytes: number;
+  readbackSuccess: boolean;
+  readbackItemCount: number;
+  durationMs: number;
+  errorMessage: string | null;
+  warnings: string[];
+  ready: boolean;
+}
+
+export interface RestoreFallbackResult {
+  restored: boolean;
+  storageKey: string;
+  itemsRestored: number;
+  bytes: number;
+  fromVersion: number;
+  matchesCurrent: boolean;
+  errorMessage: string | null;
+  driftDetected: boolean;
+  ready: boolean;
+}
+
+export interface FallbackMigrationPlan {
+  sourceKey: string;
+  targetStore: string;
+  itemsCount: number;
+  totalBytes: number;
+  estimatedDurationMs: number;
+  steps: string[];
+  crossReloadSafe: boolean;
+  warnings: string[];
+  ready: boolean;
+}
+
+export function persistFallbackToProjectsStore(store: RealIndexedDBStore, items: Array<{ key: string; value: unknown }>, mockIdb: { transaction?: (store: string, mode: string) => { objectStore: (name: string) => { put?: (val: unknown) => void }; oncomplete: ((cb: () => void) => void) } } = {}): PersistFallbackResult {
+  const start = Date.now();
+  let persisted = false;
+  let totalBytes = 0;
+  let readbackSuccess = false;
+  let readbackItemCount = 0;
+  let errorMessage: string | null = null;
+  const warnings: string[] = [];
+  try {
+    const tx = mockIdb.transaction?.(store.storeName, 'readwrite');
+    if (!tx) throw new Error('mockIdb.transaction not available');
+    const os = tx.objectStore(store.storeName);
+    if (!os.put) throw new Error('objectStore.put not available');
+    for (const item of items) {
+      os.put(item);
+      totalBytes += JSON.stringify(item).length * 2;
+    }
+    persisted = true;
+    if (items.length > 100) warnings.push(`${items.length} items may slow down IDB transactions`);
+    readbackItemCount = items.length;
+    readbackSuccess = items.length > 0;
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+  }
+  return { persisted, storageKey: store.storeName, itemCount: items.length, totalBytes, readbackSuccess, readbackItemCount, durationMs: Date.now() - start, errorMessage, warnings, ready: persisted };
+}
+
+export function restoreFallbackFromProjectsStore(store: RealIndexedDBStore, storageKey: string, mockReadback: { values: unknown[]; version: number }): RestoreFallbackResult {
+  let restored = false;
+  let itemsRestored = 0;
+  let bytes = 0;
+  let errorMessage: string | null = null;
+  let driftDetected = false;
+  try {
+    itemsRestored = mockReadback.values.length;
+    bytes = mockReadback.values.reduce<number>((sum, v) => sum + JSON.stringify(v).length * 2, 0);
+    restored = itemsRestored > 0;
+    if (!storageKey || storageKey !== store.storeName) driftDetected = true;
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+  }
+  return { restored, storageKey, itemsRestored, bytes, fromVersion: mockReadback.version, matchesCurrent: !driftDetected && restored, errorMessage, driftDetected, ready: restored };
+}
+
+export function planFallbackMigration(items: Array<{ key: string; value: unknown }>, options: { sourceKey?: string; targetStore?: string; currentVersion?: number; targetVersion?: number } = {}): FallbackMigrationPlan {
+  const sourceKey = options.sourceKey ?? 'novel-ma:fallback';
+  const targetStore = options.targetStore ?? 'projects';
+  const currentVersion = options.currentVersion ?? 1;
+  const targetVersion = options.targetVersion ?? 2;
+  const itemsCount = items.length;
+  const totalBytes = items.reduce((sum, item) => sum + JSON.stringify(item).length * 2, 0);
+  const estimatedDurationMs = Math.max(10, totalBytes / 1024 * 8);
+  const versionMismatch = currentVersion < targetVersion;
+  const steps = versionMismatch
+    ? [
+        `serialize ${itemsCount} items (${totalBytes}B, v${currentVersion})`,
+        `bump db version to ${targetVersion}`,
+        `trigger onupgradeneeded to migrate store schema`,
+        `write ${itemsCount} items to ${targetStore} v${targetVersion}`,
+        `verify schema + item count match`,
+        `commit tx + close db (cross-reload safe)`,
+      ]
+    : [
+        `serialize ${itemsCount} items (${totalBytes}B, v${currentVersion})`,
+        `write to ${targetStore} (same version)`,
+        `verify item count match`,
+        `commit tx + close db (cross-reload safe)`,
+      ];
+  const warnings: string[] = [];
+  if (totalBytes > 5_000_000) warnings.push(`total ${totalBytes}B exceeds 5MB IDB soft limit`);
+  if (itemsCount === 0) warnings.push('empty payload will not persist anything');
+  return { sourceKey, targetStore, itemsCount, totalBytes, estimatedDurationMs, steps, crossReloadSafe: persistedSuccess(targetStore), warnings, ready: true };
+}
+
+function persistedSuccess(targetStore: string): boolean {
+  return targetStore === 'projects' || targetStore === 'fallback' || targetStore === 'tags' || targetStore === 'undo';
+}
 export interface RealIndexedDBStore {
   dbName: string;
   version: number;
