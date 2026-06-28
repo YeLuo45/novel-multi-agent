@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V65 TUI 镜像交互（vim hjkl + 9 actions + 3 模式）
+
+- `buildTuiKeymap({mode, enableNavigation, enableActions})`：返回 `{mode: 'normal'|'insert'|'command', bindings[9], enabled}`，含 j/k/gg/G/Enter (navigation) + q/?/:/i (actions)。
+- `planTuiNavigate(keymap, currentSection, keySequence, allSections)`：根据 key 序列返回 `{fromSection, toSection, action, direction, matched}`；direction ∈ up/down/first/last/enter/quit/help/command/insert/unknown。
+- `buildTuiCommands(options)`：聚合 keymap 返回 `{totalBindings, uniqueActions, navigationKeys[], actionKeys[], ready}`。
+- HTML 集成：2 个 inline 按钮（列出 vim 键映射 / 导航）+ 1 个 key 输入框；用户输入 `j`/`k`/`gg`/`G`/`q` 触发 navigate。
+- 关键修复：V64 patch 时误删 IdbIntegrationTestCase interface（前向声明 TuiKeymap block），单独补回后通过。
+
 ## V64 IDB 集成测试（4 用例 + mock handle + 100% 覆盖率断言）
 
 - `buildIdbIntegrationTestCases()`：4 内置用例：basic-put-single / basic-count-after-put / no-idb-fallback / getall-empty，每个含 executor + expectedSuccess/Fallback/Steps。

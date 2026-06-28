@@ -606,6 +606,77 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface TuiKeymap {
+  mode: 'normal' | 'insert' | 'command';
+  bindings: Array<{ keys: string; action: string; description: string }>;
+  enabled: boolean;
+}
+
+export interface TuiNavigateResult {
+  fromSection: string;
+  toSection: string;
+  action: string;
+  direction: 'up' | 'down' | 'first' | 'last' | 'enter' | 'quit' | 'unknown';
+  matched: boolean;
+}
+
+export interface TuiCommands {
+  keymap: TuiKeymap;
+  totalBindings: number;
+  uniqueActions: number;
+  navigationKeys: string[];
+  actionKeys: string[];
+  ready: boolean;
+}
+
+export function buildTuiKeymap(options: { mode?: TuiKeymap['mode']; enableNavigation?: boolean; enableActions?: boolean } = {}): TuiKeymap {
+  const mode = options.mode ?? 'normal';
+  const enableNavigation = options.enableNavigation ?? true;
+  const enableActions = options.enableActions ?? true;
+  const bindings: TuiKeymap['bindings'] = [];
+  if (enableNavigation) {
+    bindings.push({ keys: 'j', action: 'down', description: '下移一节' });
+    bindings.push({ keys: 'k', action: 'up', description: '上移一节' });
+    bindings.push({ keys: 'g g', action: 'first', description: '回到首节' });
+    bindings.push({ keys: 'G', action: 'last', description: '跳到末节' });
+    bindings.push({ keys: 'Enter', action: 'enter', description: '进入当前节' });
+  }
+  if (enableActions) {
+    bindings.push({ keys: 'q', action: 'quit', description: '退出 TUI' });
+    bindings.push({ keys: '?', action: 'help', description: '显示快捷键' });
+    bindings.push({ keys: ':', action: 'command', description: '进入命令模式' });
+    bindings.push({ keys: 'i', action: 'insert', description: '进入插入模式' });
+  }
+  return { mode, bindings, enabled: true };
+}
+
+export function planTuiNavigate(keymap: TuiKeymap, currentSection: string, keySequence: string, allSections: string[]): TuiNavigateResult {
+  const binding = keymap.bindings.find((b) => b.keys === keySequence || b.keys.split(' ').join('') === keySequence);
+  if (!binding) return { fromSection: currentSection, toSection: currentSection, action: 'unknown', direction: 'unknown', matched: false };
+  if (binding.action === 'down') {
+    const idx = allSections.indexOf(currentSection);
+    const next = Math.min(allSections.length - 1, idx + 1);
+    return { fromSection: currentSection, toSection: allSections[next] ?? currentSection, action: binding.action, direction: 'down', matched: true };
+  }
+  if (binding.action === 'up') {
+    const idx = allSections.indexOf(currentSection);
+    const prev = Math.max(0, idx - 1);
+    return { fromSection: currentSection, toSection: allSections[prev] ?? currentSection, action: binding.action, direction: 'up', matched: true };
+  }
+  if (binding.action === 'first') return { fromSection: currentSection, toSection: allSections[0] ?? currentSection, action: binding.action, direction: 'first', matched: true };
+  if (binding.action === 'last') return { fromSection: currentSection, toSection: allSections[allSections.length - 1] ?? currentSection, action: binding.action, direction: 'last', matched: true };
+  if (binding.action === 'enter' || binding.action === 'quit' || binding.action === 'help' || binding.action === 'command' || binding.action === 'insert') {
+    return { fromSection: currentSection, toSection: currentSection, action: binding.action, direction: binding.action as TuiNavigateResult['direction'], matched: true };
+  }
+  return { fromSection: currentSection, toSection: currentSection, action: binding.action, direction: 'unknown', matched: false };
+}
+
+export function buildTuiCommands(options: { mode?: TuiKeymap['mode'] } = {}): TuiCommands {
+  const keymap = buildTuiKeymap(options);
+  const navigationKeys = keymap.bindings.filter((b) => ['down', 'up', 'first', 'last', 'enter'].includes(b.action)).map((b) => b.keys);
+  const actionKeys = keymap.bindings.filter((b) => ['quit', 'help', 'command', 'insert'].includes(b.action)).map((b) => b.keys);
+  return { keymap, totalBindings: keymap.bindings.length, uniqueActions: new Set(keymap.bindings.map((b) => b.action)).size, navigationKeys, actionKeys, ready: keymap.enabled };
+}
 export interface IdbIntegrationTestCase {
   name: string;
   description: string;

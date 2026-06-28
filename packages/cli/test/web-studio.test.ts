@@ -87,6 +87,9 @@ import {
   buildIdbIntegrationTestCases,
   runIdbIntegrationTest,
   assessIdbIntegrationCoverage,
+  buildTuiKeymap,
+  planTuiNavigate,
+  buildTuiCommands,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1394,5 +1397,61 @@ describe('web-first studio models', () => {
     assert.equal(coverage.failedCases + coverage.passedCases, coverage.totalCases);
     assert.equal(coverage.ready, coverage.failedCases === 0);
     assert.equal(coverage.results.length, cases.length);
+  });
+
+  it('builds V65 TUI keymap with vim hjkl bindings 9 actions and normal mode default', () => {
+    const keymap = buildTuiKeymap();
+    assert.equal(keymap.mode, 'normal');
+    assert.ok(keymap.bindings.length >= 8);
+    const keys = keymap.bindings.map((b) => b.keys);
+    assert.ok(keys.includes('j'));
+    assert.ok(keys.includes('k'));
+    assert.ok(keys.includes('g g'));
+    assert.ok(keys.includes('G'));
+    assert.ok(keys.includes('Enter'));
+    assert.ok(keys.includes('q'));
+    assert.ok(keys.includes('?'));
+    assert.ok(keys.includes(':'));
+    assert.equal(keymap.enabled, true);
+
+    const noNav = buildTuiKeymap({ enableNavigation: false });
+    assert.ok(noNav.bindings.length >= 3);
+    assert.ok(!noNav.bindings.some((b) => b.action === 'down'));
+  });
+
+  it('plans V65 TUI navigation with down up first last enter quit and unknown', () => {
+    const keymap = buildTuiKeymap();
+    const sections = ['header', 'V41', 'V42', 'V58', 'bindings'];
+    const down = planTuiNavigate(keymap, 'V41', 'j', sections);
+    assert.equal(down.direction, 'down');
+    assert.equal(down.toSection, 'V42');
+    assert.equal(down.matched, true);
+    const up = planTuiNavigate(keymap, 'V42', 'k', sections);
+    assert.equal(up.direction, 'up');
+    assert.equal(up.toSection, 'V41');
+    const first = planTuiNavigate(keymap, 'V58', 'gg', sections);
+    assert.equal(first.direction, 'first');
+    assert.equal(first.toSection, 'header');
+    const last = planTuiNavigate(keymap, 'header', 'G', sections);
+    assert.equal(last.direction, 'last');
+    assert.equal(last.toSection, 'bindings');
+    const quit = planTuiNavigate(keymap, 'V41', 'q', sections);
+    assert.equal(quit.direction, 'quit');
+    assert.equal(quit.toSection, 'V41');
+    const unknown = planTuiNavigate(keymap, 'V41', 'x', sections);
+    assert.equal(unknown.matched, false);
+    assert.equal(unknown.direction, 'unknown');
+  });
+
+  it('builds V65 TUI commands with navigation keys action keys and ready flag', () => {
+    const commands = buildTuiCommands({ mode: 'normal' });
+    assert.equal(commands.keymap.mode, 'normal');
+    assert.ok(commands.totalBindings >= 8);
+    assert.ok(commands.uniqueActions >= 5);
+    assert.ok(commands.navigationKeys.includes('j'));
+    assert.ok(commands.navigationKeys.includes('k'));
+    assert.ok(commands.actionKeys.includes('q'));
+    assert.ok(commands.actionKeys.includes('?'));
+    assert.equal(commands.ready, true);
   });
 });
