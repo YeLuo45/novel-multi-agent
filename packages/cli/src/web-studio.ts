@@ -606,6 +606,126 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface RealIndexedDBStore {
+  dbName: string;
+  version: number;
+  storeName: string;
+  openCode: string;
+  putCode: string;
+  getCode: string;
+  getAllCode: string;
+  deleteCode: string;
+  closeCode: string;
+  bytes: number;
+  ready: boolean;
+}
+
+export interface RealIndexedDBRunResult {
+  opened: boolean;
+  operation: 'open' | 'put' | 'get' | 'getAll' | 'delete' | 'close' | 'error';
+  success: boolean;
+  value: unknown;
+  values: unknown[];
+  errorMessage: string | null;
+  errorStep: 'open' | 'tx' | 'store' | 'commit' | 'unknown';
+  durationMs: number;
+  ready: boolean;
+}
+
+export interface RealIndexedDBError {
+  category: 'QuotaExceeded' | 'InvalidState' | 'Type' | 'Version' | 'Security' | 'Other';
+  message: string;
+  suggestion: string;
+  recoverable: boolean;
+}
+
+export function buildRealIndexedDBStore(options: { dbName?: string; version?: number; storeName?: string } = {}): RealIndexedDBStore {
+  const dbName = options.dbName ?? 'novel-ma';
+  const version = Math.max(1, Math.min(99, options.version ?? 1));
+  const storeName = options.storeName ?? 'fallback';
+  const openCode = `const req = indexedDB.open('${dbName}', ${version}); req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains('${storeName}')) db.createObjectStore('${storeName}', { keyPath: 'key' }); }; req.onsuccess = () => { /* db = req.result */ }; req.onerror = (e) => { console.error(e); };`;
+  const putCode = `const tx = db.transaction('${storeName}', 'readwrite'); tx.objectStore('${storeName}').put({ key: 'fallback', value: payload }); tx.oncomplete = () => db.close();`;
+  const getCode = `const tx = db.transaction('${storeName}', 'readonly'); const req2 = tx.objectStore('${storeName}').get('fallback'); req2.onsuccess = () => { console.log(req2.result?.value); db.close(); };`;
+  const getAllCode = `const tx = db.transaction('${storeName}', 'readonly'); const req3 = tx.objectStore('${storeName}').getAll(); req3.onsuccess = () => { console.log(req3.result); db.close(); };`;
+  const deleteCode = `const tx = db.transaction('${storeName}', 'readwrite'); tx.objectStore('${storeName}').delete('fallback'); tx.oncomplete = () => db.close();`;
+  const closeCode = `db.close();`;
+  const bytes = openCode.length + putCode.length + getCode.length + getAllCode.length + deleteCode.length + closeCode.length;
+  return { dbName, version, storeName, openCode, putCode, getCode, getAllCode, deleteCode, closeCode, bytes, ready: true };
+}
+
+export function runRealIndexedDBOp(store: RealIndexedDBStore, operation: 'open' | 'put' | 'get' | 'getAll' | 'delete' | 'close', payload: unknown, mockIdb: { open?: (name: string, version: number) => { result: unknown; onsuccess: ((cb: () => void) => void); onerror: ((cb: (e: unknown) => void) => void); onupgradeneeded: ((cb: () => void) => void) }; transaction?: (store: string, mode: string) => { objectStore: (name: string) => { put?: (val: unknown) => void; get?: (key: string) => { result: unknown }; getAll?: () => { result: unknown[] }; delete?: (key: string) => void }; oncomplete: ((cb: () => void) => void) } } = {}): RealIndexedDBRunResult {
+  const start = Date.now();
+  let opened = false;
+  let success = false;
+  let value: unknown = null;
+  let values: unknown[] = [];
+  let errorMessage: string | null = null;
+  let errorStep: RealIndexedDBRunResult['errorStep'] = 'unknown';
+  try {
+    if (operation === 'open') {
+      if (!mockIdb.open) throw new Error('mockIdb.open not available');
+      const req = mockIdb.open(store.dbName, store.version);
+      opened = true;
+      success = true;
+      errorStep = 'open';
+    } else {
+      const tx = mockIdb.transaction?.(store.storeName, 'readwrite');
+      if (!tx) throw new Error('mockIdb.transaction not available');
+      const os = tx.objectStore(store.storeName);
+      if (operation === 'put') {
+        if (!os.put) throw new Error('objectStore.put not available');
+        os.put({ key: 'fallback', value: payload });
+        success = true;
+      } else if (operation === 'get') {
+        if (!os.get) throw new Error('objectStore.get not available');
+        const r = os.get('fallback');
+        value = r?.result ?? null;
+        success = true;
+      } else if (operation === 'getAll') {
+        if (!os.getAll) throw new Error('objectStore.getAll not available');
+        const r = os.getAll();
+        values = r?.result ?? [];
+        success = true;
+      } else if (operation === 'delete') {
+        if (!os.delete) throw new Error('objectStore.delete not available');
+        os.delete('fallback');
+        success = true;
+      } else if (operation === 'close') {
+        success = true;
+      }
+    }
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : String(e);
+    errorStep = 'tx';
+    if (errorMessage.includes('open')) errorStep = 'open';
+    else if (errorMessage.includes('store')) errorStep = 'store';
+    else if (errorMessage.includes('commit')) errorStep = 'commit';
+  }
+  return { opened, operation: success ? operation : 'error', success, value, values, errorMessage, errorStep, durationMs: Date.now() - start, ready: success };
+}
+
+export function extractRealIndexedDBError(result: RealIndexedDBRunResult): RealIndexedDBError {
+  const msg = result.errorMessage ?? '';
+  function classify(): RealIndexedDBError['category'] {
+    if (/quota/i.test(msg)) return 'QuotaExceeded';
+    if (/invalidstate/i.test(msg)) return 'InvalidState';
+    if (/version/i.test(msg)) return 'Version';
+    if (/security/i.test(msg)) return 'Security';
+    if (/type/i.test(msg)) return 'Type';
+    return 'Other';
+  }
+  function suggest(c: RealIndexedDBError['category']): string {
+    if (c === 'QuotaExceeded') return '清理旧数据或降级到 localStorage';
+    if (c === 'InvalidState') return '关闭并重新打开数据库连接';
+    if (c === 'Version') return '触发 onupgradeneeded 迁移';
+    if (c === 'Security') return '检查浏览器 storage 配额与跨域权限';
+    if (c === 'Type') return '检查 value 是否可结构化克隆';
+    return '查看 stackTrace';
+  }
+  const category = classify();
+  const recoverable = category === 'QuotaExceeded' || category === 'InvalidState' || category === 'Type';
+  return { category, message: msg, suggestion: suggest(category), recoverable };
+}
 export interface IdbFallbackWriteResult {
   fallbackWritten: boolean;
   fallbackKey: string;

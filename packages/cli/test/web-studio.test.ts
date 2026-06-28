@@ -126,6 +126,9 @@ import {
   evalIdbFallbackWrite,
   verifyIdbFallback,
   planIdbFallbackRecovery,
+  buildRealIndexedDBStore,
+  runRealIndexedDBOp,
+  extractRealIndexedDBError,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2106,5 +2109,83 @@ describe('web-first studio models', () => {
     assert.equal(rs.primaryFailed, false);
     assert.equal(rs.fallbackReady, false);
     assert.ok(rs.strategies.includes('retry-idb'));
+  });
+
+  it('builds V78 real IndexedDB store with openCode putCode getCode getAllCode deleteCode closeCode bytes', () => {
+    const store = buildRealIndexedDBStore({ dbName: 'novel-ma-test', version: 2, storeName: 'fallback' });
+    assert.equal(store.dbName, 'novel-ma-test');
+    assert.equal(store.version, 2);
+    assert.equal(store.storeName, 'fallback');
+    assert.ok(store.openCode.includes("indexedDB.open('novel-ma-test', 2)"));
+    assert.ok(store.openCode.includes("createObjectStore('fallback'"));
+    assert.ok(store.putCode.includes("transaction('fallback'"));
+    assert.ok(store.putCode.includes(".put({ key: 'fallback', value: payload })"));
+    assert.ok(store.getCode.includes(".get('fallback')"));
+    assert.ok(store.getAllCode.includes('.getAll()'));
+    assert.ok(store.deleteCode.includes(".delete('fallback')"));
+    assert.ok(store.bytes > 0);
+    assert.equal(store.ready, true);
+  });
+
+  it('runs V78 real IndexedDB operations with put get getAll delete and error paths', () => {
+    const store = buildRealIndexedDBStore();
+    const mockIdb = {
+      open: (name: string, version: number) => ({ result: { name, version }, onsuccess: (cb) => cb(), onerror: () => {}, onupgradeneeded: () => {} }),
+      transaction: () => ({
+        objectStore: () => ({
+          put: (val) => {},
+          get: (key) => ({ result: { key, value: 'stored' } }),
+          getAll: () => ({ result: [{ key: 'fallback', value: 'stored' }] }),
+          delete: () => {},
+        }),
+        oncomplete: () => {},
+      }),
+    };
+    const open = runRealIndexedDBOp(store, 'open', 'fallback data', mockIdb);
+    assert.equal(open.operation, 'open');
+    assert.equal(open.success, true);
+
+    const put = runRealIndexedDBOp(store, 'put', 'fallback data', mockIdb);
+    assert.equal(put.operation, 'put');
+    assert.equal(put.success, true);
+
+    const get = runRealIndexedDBOp(store, 'get', null, mockIdb);
+    assert.equal(get.success, true);
+    assert.equal((get.value as { value?: string })?.value, 'stored');
+
+    const all = runRealIndexedDBOp(store, 'getAll', null, mockIdb);
+    assert.equal(all.success, true);
+    assert.equal(all.values.length, 1);
+
+    const del = runRealIndexedDBOp(store, 'delete', null, mockIdb);
+    assert.equal(del.success, true);
+
+    const close = runRealIndexedDBOp(store, 'close', null, mockIdb);
+    assert.equal(close.success, true);
+
+    const noTx = runRealIndexedDBOp(store, 'put', 'data', {});
+    assert.equal(noTx.success, false);
+    assert.ok(noTx.errorMessage?.includes('transaction'));
+  });
+
+  it('extracts V78 real IndexedDB error with category suggestion and recoverable flag', () => {
+    const mk = (msg: string | null): RealIndexedDBRunResult => ({ opened: false, operation: 'error', success: false, value: null, values: [], errorMessage: msg, errorStep: 'tx', durationMs: 0, ready: false });
+    const quota = extractRealIndexedDBError(mk('QuotaExceededError: full'));
+    assert.equal(quota.category, 'QuotaExceeded');
+    assert.equal(quota.recoverable, true);
+    assert.ok(quota.suggestion.includes('清理'));
+    const invalid = extractRealIndexedDBError(mk('InvalidStateError: closed'));
+    assert.equal(invalid.category, 'InvalidState');
+    assert.equal(invalid.recoverable, true);
+    const ver = extractRealIndexedDBError(mk('VersionError: old version'));
+    assert.equal(ver.category, 'Version');
+    assert.equal(ver.recoverable, false);
+    const sec = extractRealIndexedDBError(mk('SecurityError: denied'));
+    assert.equal(sec.category, 'Security');
+    const type = extractRealIndexedDBError(mk('TypeError: uncloneable'));
+    assert.equal(type.category, 'Type');
+    assert.equal(type.recoverable, true);
+    const other = extractRealIndexedDBError(mk('weird'));
+    assert.equal(other.category, 'Other');
   });
 });

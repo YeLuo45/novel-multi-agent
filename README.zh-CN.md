@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V78 真实 IndexedDB Runtime（6 操作 + 6 类错误 + 恢复性检测）
+
+- `buildRealIndexedDBStore({dbName, version, storeName})`：生成 6 段可执行 JS 代码（openCode + putCode + getCode + getAllCode + deleteCode + closeCode）+ bytes + ready。代码包含 `indexedDB.open + onupgradeneeded + createObjectStore + transaction + objectStore().put/get/getAll/delete + db.close()`。
+- `runRealIndexedDBOp(store, operation, payload, mockIdb)`：try/catch 真实调用 mockIdb.open / transaction.objectStore().put/get/getAll/delete；返回 `RealIndexedDBRunResult{opened, operation, success, value, values, errorMessage, errorStep: 'open'|'tx'|'store'|'commit'|'unknown', durationMs, ready}` 9 字段。
+- `extractRealIndexedDBError(result)`：6 类错误分类（QuotaExceeded/InvalidState/Version/Security/Type/Other）+ suggestion + `recoverable` 标志（QuotaExceeded/InvalidState/Type 可恢复，Version/Security/Other 不可）。
+- HTML 集成：3 个 inline 按钮（build/run/error），run 按钮一次性执行 6 个操作（open→put→get→getAll→delete→close）并显示每次 success + durationMs。
+
 ## V77 Eval IDB fallback 真实写入（evalIdbFallbackWrite + verifyIdbFallback + recovery）
 
 - `evalIdbFallbackWrite(result, fallbackStorage)`：用 try/catch 真实调用 fallbackStorage.setItem(result.fallbackStorageKey, result.outputPreview) + 立即 readback 校验；返回 `IdbFallbackWriteResult{fallbackWritten, fallbackKey, fallbackValue, fallbackError, readbackSuccess, readbackValue, durationMs, timestamp, ready}` 9 字段。
