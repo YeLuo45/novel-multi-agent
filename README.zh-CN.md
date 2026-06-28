@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V80 dual-write 真实 IndexedDB 端到端（primary + secondary + readback + recovery）
+
+- `runRealDualWrite(plan, payload, mockIdb, mockLocalStorage)`：try/catch 真实调用 mockLocalStorage.setItem(primaryKey, payload) + mockIdb.transaction('projects', 'readwrite').objectStore('projects').put({key, value}) + 立即 readback 校验，返回 `RealDualWriteRunResult{primaryWritten, secondaryWritten, readbackMatched, primaryError, secondaryError, readbackError, primaryDurationMs, secondaryDurationMs, readbackDurationMs, totalDurationMs, attempt}` 13 字段。
+- `extractRealDualWriteError(result)`：5 类（QuotaExceeded/InvalidState/Type/Security/Other）+ 独立 primary/secondary suggestion + recoverable 标志（QuotaExceeded/InvalidState 可恢复）。
+- `planRealDualWriteRecovery(result, attempt, {maxAttempts})`：3 策略（retry-primary/retry-secondary/fallback-storage）+ 指数退避 200*2^attempt ms + primaryFailed/secondaryFailed 双标志。
+- HTML 集成：3 个 inline 按钮（run/error/recovery），run 按钮从 library.list() 自动生成 payload + 演示 3 attempt 状态。
+
 ## V79 fallback 跨刷新持久化（persist + restore + migration v1→v2）
 
 - `persistFallbackToProjectsStore(store, items, mockIdb)`：try/catch 真实调用 mockIdb.transaction(storeName, 'readwrite') + objectStore().put(item) 循环 + 累计 totalBytes + 100+ items warning + readbackSuccess。

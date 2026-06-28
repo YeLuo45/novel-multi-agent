@@ -606,7 +606,138 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
-export interface PersistFallbackResult {
+export interface RealDualWriteRunResult {
+  primaryWritten: boolean;
+  secondaryWritten: boolean;
+  readbackMatched: boolean;
+  primaryStorage: 'localStorage' | 'indexedDB';
+  secondaryStorage: 'localStorage' | 'indexedDB';
+  primaryError: string | null;
+  secondaryError: string | null;
+  readbackError: string | null;
+  primaryDurationMs: number;
+  secondaryDurationMs: number;
+  readbackDurationMs: number;
+  totalDurationMs: number;
+  attempt: number;
+}
+
+export interface RealDualWriteError {
+  primaryCategory: 'QuotaExceeded' | 'InvalidState' | 'Type' | 'Security' | 'Other';
+  secondaryCategory: 'QuotaExceeded' | 'InvalidState' | 'Type' | 'Security' | 'Other';
+  primarySuggestion: string;
+  secondarySuggestion: string;
+  recoverable: boolean;
+}
+
+export interface RealDualWriteRecoveryPlan {
+  attempt: number;
+  maxAttempts: number;
+  primaryFailed: boolean;
+  secondaryFailed: boolean;
+  strategies: Array<'retry-primary' | 'retry-secondary' | 'fallback-storage' | 'abort'>;
+  nextDelayMs: number;
+  ready: boolean;
+}
+
+export function runRealDualWrite(plan: PersistenceDualWritePlan, payload: string, mockIdb: { open?: (name: string, version: number) => { result: unknown; onsuccess: ((cb: () => void) => void); onerror: ((cb: (e: unknown) => void) => void) }; transaction?: (store: string, mode: string) => { objectStore: (name: string) => { put?: (val: unknown) => void; get?: (key: string) => { result: unknown } }; oncomplete: ((cb: () => void) => void) } }, mockLocalStorage: { setItem?: (k: string, v: string) => void; getItem?: (k: string) => string | null } = {}): RealDualWriteRunResult {
+  const start = Date.now();
+  let primaryWritten = false;
+  let secondaryWritten = false;
+  let readbackMatched = false;
+  let primaryError: string | null = null;
+  let secondaryError: string | null = null;
+  let readbackError: string | null = null;
+  const primaryStart = Date.now();
+  try {
+    if (plan.primaryStorage === 'localStorage') {
+      mockLocalStorage.setItem?.(plan.primaryKey, payload);
+      primaryWritten = true;
+    } else if (mockIdb.transaction) {
+      const tx = mockIdb.transaction('projects', 'readwrite');
+      tx.objectStore('projects').put?.({ key: plan.primaryKey, value: payload });
+      primaryWritten = true;
+    } else {
+      primaryError = 'no mock runtime available for primary';
+    }
+  } catch (e) {
+    primaryError = e instanceof Error ? e.message : String(e);
+  }
+  const primaryDurationMs = Date.now() - primaryStart;
+  const secondaryStart = Date.now();
+  try {
+    if (plan.secondaryStorage === 'localStorage') {
+      mockLocalStorage.setItem?.(plan.secondaryKey, payload);
+      secondaryWritten = true;
+    } else if (mockIdb.transaction) {
+      const tx = mockIdb.transaction('projects', 'readwrite');
+      tx.objectStore('projects').put?.({ key: plan.secondaryKey, value: payload });
+      secondaryWritten = true;
+    } else {
+      secondaryError = 'no mock runtime available for secondary';
+    }
+  } catch (e) {
+    secondaryError = e instanceof Error ? e.message : String(e);
+  }
+  const secondaryDurationMs = Date.now() - secondaryStart;
+  const readbackStart = Date.now();
+  try {
+    let actual: string | null = null;
+    if (plan.primaryStorage === 'localStorage') {
+      actual = mockLocalStorage.getItem?.(plan.primaryKey) ?? null;
+    } else if (mockIdb.transaction) {
+      const tx = mockIdb.transaction('projects', 'readonly');
+      const r = tx.objectStore('projects').get?.(plan.primaryKey);
+      const obj = r?.result as { value?: string } | undefined;
+      actual = obj?.value ?? null;
+    }
+    readbackMatched = actual === payload;
+    if (!readbackMatched && !primaryError) readbackError = 'readback value mismatch';
+  } catch (e) {
+    readbackError = e instanceof Error ? e.message : String(e);
+  }
+  const readbackDurationMs = Date.now() - readbackStart;
+  return { primaryWritten, secondaryWritten, readbackMatched, primaryStorage: plan.primaryStorage, secondaryStorage: plan.secondaryStorage, primaryError, secondaryError, readbackError, primaryDurationMs, secondaryDurationMs, readbackDurationMs, totalDurationMs: Date.now() - start, attempt: 1 };
+}
+
+export function extractRealDualWriteError(result: RealDualWriteRunResult): RealDualWriteError {
+  function classify(err: string | null): RealDualWriteError['primaryCategory'] {
+    if (!err) return 'Other';
+    if (/quota/i.test(err)) return 'QuotaExceeded';
+    if (/invalidstate/i.test(err)) return 'InvalidState';
+    if (/security/i.test(err)) return 'Security';
+    if (/type/i.test(err)) return 'Type';
+    return 'Other';
+  }
+  function suggest(c: RealDualWriteError['primaryCategory']): string {
+    if (c === 'QuotaExceeded') return '清理旧数据后重试';
+    if (c === 'InvalidState') return '关闭并重新打开数据库连接';
+    if (c === 'Security') return '检查浏览器 storage 配额与跨域权限';
+    if (c === 'Type') return '检查 value 类型';
+    return '查看 full error log';
+  }
+  const primaryCategory = classify(result.primaryError);
+  const secondaryCategory = classify(result.secondaryError);
+  const recoverable = primaryCategory === 'QuotaExceeded' || primaryCategory === 'InvalidState' || secondaryCategory === 'QuotaExceeded' || secondaryCategory === 'InvalidState';
+  return { primaryCategory, secondaryCategory, primarySuggestion: suggest(primaryCategory), secondarySuggestion: suggest(secondaryCategory), recoverable };
+}
+
+export function planRealDualWriteRecovery(result: RealDualWriteRunResult, attempt: number, options: { maxAttempts?: number } = {}): RealDualWriteRecoveryPlan {
+  const maxAttempts = Math.max(1, Math.min(10, options.maxAttempts ?? 3));
+  const current = Math.max(1, Math.min(maxAttempts, attempt));
+  const nextDelayMs = current >= maxAttempts ? 0 : Math.min(30_000, 200 * Math.pow(2, current));
+  const primaryFailed = !result.primaryWritten || result.primaryError !== null;
+  const secondaryFailed = !result.secondaryWritten || result.secondaryError !== null;
+  const strategies: RealDualWriteRecoveryPlan['strategies'] = current >= maxAttempts
+    ? ['fallback-storage', 'abort']
+    : primaryFailed && secondaryFailed
+      ? ['retry-primary', 'retry-secondary', 'fallback-storage']
+      : primaryFailed
+        ? ['retry-primary', 'fallback-storage']
+        : ['retry-secondary', 'fallback-storage'];
+  return { attempt: current, maxAttempts, primaryFailed, secondaryFailed, strategies, nextDelayMs, ready: !primaryFailed || !secondaryFailed };
+}
+  export interface PersistFallbackResult {
   persisted: boolean;
   storageKey: string;
   itemCount: number;

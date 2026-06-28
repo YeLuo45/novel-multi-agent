@@ -132,6 +132,9 @@ import {
   persistFallbackToProjectsStore,
   restoreFallbackFromProjectsStore,
   planFallbackMigration,
+  runRealDualWrite,
+  extractRealDualWriteError,
+  planRealDualWriteRecovery,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2259,5 +2262,62 @@ describe('web-first studio models', () => {
     const big = Array.from({ length: 100_000 }, (_, i) => ({ key: `k${i}`, value: { x: 'a'.repeat(50) } }));
     const bigPlan = planFallbackMigration(big, { currentVersion: 1, targetVersion: 2 });
     assert.ok(bigPlan.warnings.some((w) => w.includes('5MB')));
+  });
+
+  it('runs V80 real dual-write with primary secondary readback and storage breakdown', () => {
+    const payload = 'dual-write-v80-payload';
+    const plan = planPersistenceDualWrite({ payloadJson: payload, itemsCount: 1, totalBytes: payload.length * 2, checksum: 'checksum-v80', format: 'json', generatedAt: '2026-06-28T00:00:00Z', compressionRatio: 1 }, { primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryKey: 'v80-primary', secondaryKey: 'v80-secondary' });
+    const mockStore: Record<string, string> = {};
+    const mockIdb = { open: () => ({ result: {}, onsuccess: (cb) => cb(), onerror: () => {} }), transaction: () => ({ objectStore: () => ({ put: (val) => { mockStore[val.key] = val.value; }, get: (key) => ({ result: { key, value: mockStore[key] } }) }), oncomplete: () => {} }) };
+    const mockLocalStorage = { setItem: (k, v) => { mockStore[k] = v; }, getItem: (k) => mockStore[k] ?? null };
+    const result = runRealDualWrite(plan, payload, mockIdb, mockLocalStorage);
+    assert.equal(result.primaryWritten, true);
+    assert.equal(result.secondaryWritten, true);
+    assert.equal(result.readbackMatched, true);
+    assert.equal(result.primaryStorage, 'localStorage');
+    assert.equal(result.secondaryStorage, 'indexedDB');
+    assert.equal(result.primaryError, null);
+    assert.equal(result.secondaryError, null);
+    assert.equal(result.readbackError, null);
+    assert.ok(result.primaryDurationMs >= 0);
+    assert.ok(result.secondaryDurationMs >= 0);
+    assert.ok(result.readbackDurationMs >= 0);
+    assert.ok(result.totalDurationMs >= 0);
+    assert.equal(result.attempt, 1);
+  });
+
+  it('extracts V80 real dual-write error with primary/secondary category and recoverable flag', () => {
+    const mk = (p: string | null, s: string | null): RealDualWriteRunResult => ({ primaryWritten: false, secondaryWritten: false, readbackMatched: false, primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryError: p, secondaryError: s, readbackError: null, primaryDurationMs: 0, secondaryDurationMs: 0, readbackDurationMs: 0, totalDurationMs: 0, attempt: 1 });
+    const quota = extractRealDualWriteError(mk('QuotaExceededError: full', 'QuotaExceededError: full'));
+    assert.equal(quota.primaryCategory, 'QuotaExceeded');
+    assert.equal(quota.secondaryCategory, 'QuotaExceeded');
+    assert.equal(quota.recoverable, true);
+    const invalid = extractRealDualWriteError(mk('InvalidStateError: closed', null));
+    assert.equal(invalid.primaryCategory, 'InvalidState');
+    assert.equal(invalid.recoverable, true);
+    const sec = extractRealDualWriteError(mk(null, 'SecurityError: denied'));
+    assert.equal(sec.secondaryCategory, 'Security');
+    const ok = extractRealDualWriteError(mk(null, null));
+    assert.equal(ok.primaryCategory, 'Other');
+    assert.equal(ok.recoverable, false);
+  });
+
+  it('plans V80 real dual-write recovery with attempts strategies primary secondary and ready flag', () => {
+    const ok = planRealDualWriteRecovery({ primaryWritten: true, secondaryWritten: true, readbackMatched: true, primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryError: null, secondaryError: null, readbackError: null, primaryDurationMs: 0, secondaryDurationMs: 0, readbackDurationMs: 0, totalDurationMs: 0, attempt: 1 }, 1);
+    assert.equal(ok.attempt, 1);
+    assert.equal(ok.primaryFailed, false);
+    assert.equal(ok.secondaryFailed, false);
+    assert.equal(ok.ready, true);
+    assert.ok(ok.strategies.includes('retry-secondary'));
+
+    const fail = planRealDualWriteRecovery({ primaryWritten: false, secondaryWritten: false, readbackMatched: false, primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryError: 'fail', secondaryError: 'fail', readbackError: null, primaryDurationMs: 0, secondaryDurationMs: 0, readbackDurationMs: 0, totalDurationMs: 0, attempt: 1 }, 1);
+    assert.equal(fail.primaryFailed, true);
+    assert.equal(fail.secondaryFailed, true);
+    assert.ok(fail.strategies.includes('retry-primary'));
+    assert.ok(fail.strategies.includes('retry-secondary'));
+
+    const r3 = planRealDualWriteRecovery({ primaryWritten: false, secondaryWritten: false, readbackMatched: false, primaryStorage: 'localStorage', secondaryStorage: 'indexedDB', primaryError: 'fail', secondaryError: 'fail', readbackError: null, primaryDurationMs: 0, secondaryDurationMs: 0, readbackDurationMs: 0, totalDurationMs: 0, attempt: 1 }, 3);
+    assert.equal(r3.nextDelayMs, 0);
+    assert.ok(r3.strategies.includes('fallback-storage'));
   });
 });
