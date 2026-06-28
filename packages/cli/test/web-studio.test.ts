@@ -123,6 +123,9 @@ import {
   runTuiScrollIntoView,
   planTuiAnimation,
   buildTuiSectionElement,
+  evalIdbFallbackWrite,
+  verifyIdbFallback,
+  planIdbFallbackRecovery,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -2040,5 +2043,68 @@ describe('web-first studio models', () => {
     assert.equal(el.attributes['role'], 'tab');
     assert.equal(el.attributes['aria-label'], 'V42 panel');
     assert.equal(el.textContent, 'Interactive Panel');
+  });
+
+  it('writes V77 IDB fallback with storage mock and readback success', () => {
+    const mockStore: Record<string, string> = {};
+    const result: BrowserEvalRunResult = { success: false, stepsCompleted: 0, totalSteps: 3, errorMessage: 'IndexedDB not available', errorStep: 1, fallbackTriggered: true, fallbackStorageKey: 'novel-ma:fb', durationMs: 0, outputPreview: 'fallback data', stackTrace: null };
+    const fb = evalIdbFallbackWrite(result, { setItem: (k, v) => { mockStore[k] = v; }, getItem: (k) => mockStore[k] ?? null });
+    assert.equal(fb.fallbackWritten, true);
+    assert.equal(fb.fallbackKey, 'novel-ma:fb');
+    assert.equal(fb.fallbackValue, 'fallback data');
+    assert.equal(fb.fallbackError, null);
+    assert.equal(fb.readbackSuccess, true);
+    assert.equal(fb.readbackValue, 'fallback data');
+    assert.ok(fb.timestamp.length > 0);
+
+    const noSetItem = evalIdbFallbackWrite(result, {});
+    assert.equal(noSetItem.fallbackWritten, false);
+    assert.equal(noSetItem.fallbackError, 'fallback storage has no setItem method');
+  });
+
+  it('verifies V77 IDB fallback with checksum match and drift detection', () => {
+    const mockStore: Record<string, string> = {};
+    const result: BrowserEvalRunResult = { success: false, stepsCompleted: 0, totalSteps: 3, errorMessage: 'err', errorStep: 1, fallbackTriggered: true, fallbackStorageKey: 'novel-ma:v77', durationMs: 0, outputPreview: 'verify data', stackTrace: null };
+    const fb = evalIdbFallbackWrite(result, { setItem: (k, v) => { mockStore[k] = v; }, getItem: (k) => mockStore[k] ?? null });
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < fb.fallbackValue.length; i += 1) {
+      hash ^= fb.fallbackValue.charCodeAt(i);
+      hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+    }
+    const expected = hash.toString(16).padStart(8, '0');
+    const verify = verifyIdbFallback(fb, { getItem: (k) => mockStore[k] ?? null }, expected);
+    assert.equal(verify.match, true);
+    assert.equal(verify.expectedExists, true);
+    assert.equal(verify.actualExists, true);
+    assert.equal(verify.driftDetected, false);
+    assert.equal(verify.checksums.expected, expected);
+    assert.equal(verify.checksums.actual, expected);
+
+    mockStore['novel-ma:v77'] = 'corrupted';
+    const drift = verifyIdbFallback(fb, { getItem: (k) => mockStore[k] ?? null }, expected);
+    assert.equal(drift.match, false);
+    assert.equal(drift.driftDetected, true);
+  });
+
+  it('plans V77 IDB fallback recovery with attempts strategies fallbackReady and estimateBytes', () => {
+    const result: BrowserEvalRunResult = { success: false, stepsCompleted: 0, totalSteps: 3, errorMessage: 'IndexedDB down', errorStep: 1, fallbackTriggered: true, fallbackStorageKey: 'novel-ma:v77-fb', durationMs: 0, outputPreview: 'fallback payload', stackTrace: null };
+    const fb = evalIdbFallbackWrite(result, { setItem: () => {}, getItem: () => 'fallback payload' });
+    const r1 = planIdbFallbackRecovery(result, fb, 1);
+    assert.equal(r1.attempt, 1);
+    assert.equal(r1.maxAttempts, 3);
+    assert.equal(r1.primaryFailed, true);
+    assert.equal(r1.fallbackReady, true);
+    assert.ok(r1.strategies.includes('write-fallback'));
+    assert.ok(r1.estimateBytes > 0);
+    assert.equal(r1.ready, true);
+
+    const r3 = planIdbFallbackRecovery(result, fb, 3);
+    assert.equal(r3.nextDelayMs, 0);
+
+    const successResult: BrowserEvalRunResult = { ...result, success: true, errorMessage: null };
+    const rs = planIdbFallbackRecovery(successResult, null, 1);
+    assert.equal(rs.primaryFailed, false);
+    assert.equal(rs.fallbackReady, false);
+    assert.ok(rs.strategies.includes('retry-idb'));
   });
 });

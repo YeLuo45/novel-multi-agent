@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V77 Eval IDB fallback 真实写入（evalIdbFallbackWrite + verifyIdbFallback + recovery）
+
+- `evalIdbFallbackWrite(result, fallbackStorage)`：用 try/catch 真实调用 fallbackStorage.setItem(result.fallbackStorageKey, result.outputPreview) + 立即 readback 校验；返回 `IdbFallbackWriteResult{fallbackWritten, fallbackKey, fallbackValue, fallbackError, readbackSuccess, readbackValue, durationMs, timestamp, ready}` 9 字段。
+- `verifyIdbFallback(fallback, storage, expectedChecksum)`：从 storage 真实 getItem 计算 fnv1a checksum + 3 路校验（exists/valueMatch/checksumMatch）+ driftDetected + errorMessage。
+- `planIdbFallbackRecovery(result, fallback, attempt, {maxAttempts})`：根据 primaryFailed + fallbackReady + current 三态选择策略（write-fallback/retry-idb/abort），指数退避 200*2^attempt ms + estimateBytes。
+- HTML 集成：3 个 inline 按钮（write/verify/recovery），mockStorage 用真实 JS Map + 演示校验对比 + recovery 3 attempt。
+
 ## V76 TUI scrollIntoView 真实执行（runTuiScrollIntoView + animation frames + DOM 元素）
 
 - `runTuiScrollIntoView(result, mockDom)`：用 try/catch 真实调用 mockEl.scrollIntoView({behavior, block, inline})；mockDom 接受 querySelector + plan；返回 `TuiScrollExecutionResult{targetFound, scrollIntoViewCalled, smoothAnimated, stepsApplied, totalScrollY, durationMs, fallbackUsed, errorMessage}` 8 字段。

@@ -606,7 +606,106 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
-export interface TuiScrollExecutionResult {
+export interface IdbFallbackWriteResult {
+  fallbackWritten: boolean;
+  fallbackKey: string;
+  fallbackValue: string;
+  fallbackError: string | null;
+  readbackSuccess: boolean;
+  readbackValue: string | null;
+  durationMs: number;
+  timestamp: string;
+  ready: boolean;
+}
+
+export interface IdbFallbackVerification {
+  match: boolean;
+  fallbackKey: string;
+  expectedExists: boolean;
+  actualExists: boolean;
+  driftDetected: boolean;
+  checksums: { expected: string; actual: string };
+  errorMessage: string | null;
+  ready: boolean;
+}
+
+export interface IdbFallbackRecoveryPlan {
+  attempt: number;
+  maxAttempts: number;
+  primaryFailed: boolean;
+  fallbackReady: boolean;
+  strategies: Array<'write-fallback' | 'retry-idb' | 'abort'>;
+  nextDelayMs: number;
+  estimateBytes: number;
+  ready: boolean;
+}
+
+export function evalIdbFallbackWrite(result: BrowserEvalRunResult, fallbackStorage: { setItem?: (k: string, v: string) => void; getItem?: (k: string) => string | null }): IdbFallbackWriteResult {
+  const start = Date.now();
+  let fallbackWritten = false;
+  let fallbackError: string | null = null;
+  const fallbackKey = result.fallbackStorageKey;
+  const fallbackValue = result.outputPreview ?? '';
+  try {
+    if (fallbackStorage.setItem) {
+      fallbackStorage.setItem(fallbackKey, fallbackValue);
+      fallbackWritten = true;
+    } else {
+      fallbackError = 'fallback storage has no setItem method';
+    }
+  } catch (e) {
+    fallbackError = e instanceof Error ? e.message : String(e);
+  }
+  let readbackValue: string | null = null;
+  let readbackSuccess = false;
+  try {
+    readbackValue = fallbackStorage.getItem?.(fallbackKey) ?? null;
+    readbackSuccess = readbackValue === fallbackValue;
+  } catch (e) {
+    fallbackError = `${fallbackError ?? ''} | readback: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  return { fallbackWritten, fallbackKey, fallbackValue, fallbackError, readbackSuccess, readbackValue, durationMs: Date.now() - start, timestamp: new Date().toISOString(), ready: fallbackWritten };
+}
+
+export function verifyIdbFallback(fallback: IdbFallbackWriteResult, storage: { getItem?: (k: string) => string | null }, expectedChecksum: string): IdbFallbackVerification {
+  let actualValue: string | null = null;
+  let actualChecksum = '';
+  let actualExists = false;
+  try {
+    actualValue = storage.getItem?.(fallback.fallbackKey) ?? null;
+    actualExists = actualValue !== null;
+    if (actualValue) {
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < actualValue.length; i += 1) {
+        hash ^= actualValue.charCodeAt(i);
+        hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+      }
+      actualChecksum = hash.toString(16).padStart(8, '0');
+    }
+  } catch (e) {
+    return { match: false, fallbackKey: fallback.fallbackKey, expectedExists: true, actualExists: false, driftDetected: true, checksums: { expected: expectedChecksum, actual: '' }, errorMessage: e instanceof Error ? e.message : String(e), ready: false };
+  }
+  const match = actualExists && actualValue === fallback.fallbackValue && actualChecksum === expectedChecksum;
+  return { match, fallbackKey: fallback.fallbackKey, expectedExists: true, actualExists, driftDetected: !match, checksums: { expected: expectedChecksum, actual: actualChecksum }, errorMessage: null, ready: actualExists };
+}
+
+export function planIdbFallbackRecovery(result: BrowserEvalRunResult, fallback: IdbFallbackWriteResult | null, attempt: number, options: { maxAttempts?: number } = {}): IdbFallbackRecoveryPlan {
+  const maxAttempts = Math.max(1, Math.min(10, options.maxAttempts ?? 3));
+  const current = Math.max(1, Math.min(maxAttempts, attempt));
+  const nextDelayMs = current >= maxAttempts ? 0 : Math.min(30_000, 200 * Math.pow(2, current));
+  const primaryFailed = !result.success && result.errorMessage !== null;
+  const fallbackReady = fallback !== null && fallback.ready;
+  const strategies: IdbFallbackRecoveryPlan['strategies'] = current >= maxAttempts
+    ? fallbackReady ? ['write-fallback', 'abort'] : ['abort']
+    : current === 1
+      ? primaryFailed
+        ? fallbackReady ? ['write-fallback', 'retry-idb'] : ['write-fallback']
+        : ['retry-idb']
+      : fallbackReady ? ['write-fallback', 'retry-idb'] : ['retry-idb'];
+  const estimateBytes = (fallback?.fallbackValue.length ?? result.outputPreview?.length ?? 0) * 2;
+  return { attempt: current, maxAttempts, primaryFailed, fallbackReady, strategies, nextDelayMs, estimateBytes, ready: result.fallbackStorageKey.length > 0 };
+}
+  export interface TuiScrollExecutionResult {
   targetFound: boolean;
   scrollIntoViewCalled: boolean;
   smoothAnimated: boolean;
