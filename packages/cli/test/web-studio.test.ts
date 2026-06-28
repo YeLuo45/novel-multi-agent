@@ -111,6 +111,9 @@ import {
   runBrowserEval,
   extractBrowserEvalError,
   planBrowserEvalRetry,
+  buildTuiScrollIntoView,
+  planTuiSmoothScroll,
+  buildTuiKeyboardFocus,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1832,5 +1835,48 @@ describe('web-first studio models', () => {
     assert.equal(r5.maxAttempts, 10);
     assert.equal(r5.attempt, 5);
     assert.ok(r5.nextDelayMs >= 0);
+  });
+
+  it('builds V73 TUI scrollIntoView code with target selector behavior block and inline options', () => {
+    const plan = buildTuiScrollPlan([{ id: 's0' }, { id: 's1' }, { id: 's2' }], 0, { containerHeight: 100, itemHeight: 30 });
+    const result = buildTuiScrollIntoView(plan, 2, { behavior: 'smooth', block: 'center' });
+    assert.equal(result.targetSelector, '#tui-section-2');
+    assert.equal(result.sourceSelector, '.tui-section-list');
+    assert.equal(result.scrollOptions.behavior, 'smooth');
+    assert.equal(result.scrollOptions.block, 'center');
+    assert.ok(result.scrollCode.includes('scrollIntoView'));
+    assert.ok(result.scrollCode.includes('behavior: \'smooth\''));
+    assert.ok(result.scrollCode.includes('block: \'center\''));
+    assert.equal(result.ready, true);
+  });
+
+  it('plans V73 TUI smooth scroll with steps progress easing and total duration', () => {
+    const plan = planTuiSmoothScroll(0, 100, 5, { stepIntervalMs: 50, easing: 'ease-in-out' });
+    assert.equal(plan.fromIndex, 0);
+    assert.equal(plan.toIndex, 100);
+    assert.equal(plan.totalDistance, 100);
+    assert.equal(plan.stepCount, 5);
+    assert.equal(plan.stepIntervalMs, 50);
+    assert.equal(plan.totalDurationMs, 250);
+    assert.equal(plan.easing, 'ease-in-out');
+    assert.equal(plan.steps.length, 6);
+    assert.equal(plan.steps[0]?.progress, 0);
+    assert.ok(Math.abs((plan.steps[5]?.scrollY ?? 0) - 100) < 0.01);
+    assert.equal(plan.ready, true);
+
+    const linear = planTuiSmoothScroll(0, 10, 3, { easing: 'linear' });
+    assert.equal(linear.easing, 'linear');
+    assert.ok(Math.abs((linear.steps[2]?.scrollY ?? 0) - (10 * 2 / 3)) < 0.01);
+  });
+
+  it('builds V73 TUI keyboard focus with focused selector tabIndex ariaLabel and selected state', () => {
+    const focus = buildTuiKeyboardFocus(2, [{ id: 'header' }, { id: 'V41' }, { id: 'V42' }, { id: 'V58' }], { tabIndex: 1, ariaLabel: 'V42 active section' });
+    assert.equal(focus.activeIndex, 2);
+    assert.equal(focus.focusedSelector, '#tui-section-2');
+    assert.equal(focus.tabIndex, 1);
+    assert.equal(focus.ariaLabel, 'V42 active section');
+    assert.equal(focus.ariaSelected, true);
+    assert.equal(focus.hasFocus, true);
+    assert.equal(focus.ready, true);
   });
 });

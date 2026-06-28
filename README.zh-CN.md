@@ -49,6 +49,14 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V73 TUI 真实滚动跟随（scrollIntoView JS 代码 + smooth 步骤 + keyboard focus）
+
+- `buildTuiScrollIntoView(plan, targetIndex, {behavior, block, sourceSelector, targetSelectorPrefix})`：生成可执行 JS 代码字符串 `document.querySelector('#tui-section-X') + scrollIntoView({behavior, block, inline})`，3 个 scrollOptions（behavior/block/inline）+ source/target selector + ready flag。
+- `planTuiSmoothScroll(fromIndex, toIndex, totalSteps, {stepIntervalMs, easing})`：4 种 easing 曲线（linear/ease-in/ease-out/ease-in-out）+ totalSteps 1-20 + stepIntervalMs 10-200ms + 完整 steps 数组（每步 index/scrollY/progress）。
+- `buildTuiKeyboardFocus(activeIndex, sections, {tabIndex, ariaLabel, ariaSelected})`：返回 `TuiKeyboardFocus{focusedSelector, tabIndex, ariaLabel, ariaSelected, hasFocus}` + ready flag。
+- HTML 集成：3 个 inline 按钮（scrollIntoView/smooth-scroll/keyboard-focus），scrollIntoView 输出可执行 JS 代码预览。
+- 关键修复：`totalSteps` 参数名与 clamp 后局部变量冲突 → 改为 `clampedSteps`，避免 `'totalSteps' has already been declared` 错误。
+
 ## V72 Eval HTML 真实运行（new Function + try/catch + 5 类错误分类 + 重试）
 
 - `runBrowserEval(adapter, mockRuntime)`：用 `new Function('fallbackStorageKey', evalCode.code)` 真实执行 V70 wrapper code，含 try/catch + 5 步错误捕获 + IndexedDB 可用性检查 + fallbackStorageKey 注入。

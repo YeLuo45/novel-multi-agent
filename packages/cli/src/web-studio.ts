@@ -606,6 +606,69 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface TuiScrollIntoViewResult {
+  scrollCode: string;
+  scrollOptions: { behavior: 'smooth' | 'instant' | 'auto'; block: 'start' | 'center' | 'end' | 'nearest'; inline: 'start' | 'center' | 'end' | 'nearest' };
+  targetSelector: string;
+  sourceSelector: string;
+  ready: boolean;
+}
+
+export interface TuiSmoothScrollPlan {
+  fromIndex: number;
+  toIndex: number;
+  totalDistance: number;
+  stepCount: number;
+  stepIntervalMs: number;
+  totalDurationMs: number;
+  easing: 'linear' | 'ease-in-out' | 'ease-out' | 'ease-in';
+  steps: Array<{ index: number; scrollY: number; progress: number }>;
+  ready: boolean;
+}
+
+export interface TuiKeyboardFocus {
+  activeIndex: number;
+  focusedSelector: string;
+  tabIndex: number;
+  ariaLabel: string;
+  ariaSelected: boolean;
+  hasFocus: boolean;
+  ready: boolean;
+}
+
+export function buildTuiScrollIntoView(plan: TuiScrollPlan, targetIndex: number, options: { sourceSelector?: string; targetSelectorPrefix?: string; behavior?: 'smooth' | 'instant' | 'auto'; block?: 'start' | 'center' | 'end' | 'nearest' } = {}): TuiScrollIntoViewResult {
+  const behavior = options.behavior ?? 'smooth';
+  const block = options.block ?? 'nearest';
+  const sourceSelector = options.sourceSelector ?? '.tui-section-list';
+  const targetSelector = `${options.targetSelectorPrefix ?? '#tui-section-'}${targetIndex}`;
+  const scrollCode = `const el = document.querySelector('${targetSelector}'); if (el && typeof el.scrollIntoView === 'function') { el.scrollIntoView({ behavior: '${behavior}', block: '${block}', inline: 'nearest' }); }`;
+  return { scrollCode, scrollOptions: { behavior, block, inline: 'nearest' }, targetSelector, sourceSelector, ready: plan.ready && targetIndex >= 0 && targetIndex < 999 };
+}
+
+export function planTuiSmoothScroll(fromIndex: number, toIndex: number, totalSteps: number, options: { stepIntervalMs?: number; easing?: 'linear' | 'ease-in-out' | 'ease-out' | 'ease-in' } = {}): TuiSmoothScrollPlan {
+  const stepIntervalMs = Math.max(10, Math.min(200, options.stepIntervalMs ?? 50));
+  const easing = options.easing ?? 'ease-in-out';
+  const clampedSteps = Math.max(1, Math.min(20, totalSteps));
+  const totalDistance = toIndex - fromIndex;
+  const steps: TuiSmoothScrollPlan['steps'] = [];
+  for (let i = 0; i <= clampedSteps; i += 1) {
+    const progress = clampedSteps === 0 ? 1 : i / clampedSteps;
+    let eased = progress;
+    if (easing === 'ease-in-out') eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    else if (easing === 'ease-out') eased = 1 - Math.pow(1 - progress, 2);
+    else if (easing === 'ease-in') eased = progress * progress;
+    steps.push({ index: i, scrollY: fromIndex + totalDistance * eased, progress });
+  }
+  return { fromIndex, toIndex, totalDistance, stepCount: clampedSteps, stepIntervalMs, totalDurationMs: clampedSteps * stepIntervalMs, easing, steps, ready: clampedSteps >= 1 };
+}
+
+export function buildTuiKeyboardFocus(activeIndex: number, sections: Array<{ id: string }>, options: { tabIndex?: number; ariaLabel?: string; ariaSelected?: boolean } = {}): TuiKeyboardFocus {
+  const section = sections[activeIndex];
+  const tabIndex = options.tabIndex ?? 0;
+  const ariaLabel = options.ariaLabel ?? `${section?.id ?? 'unknown'} section`;
+  const focusedSelector = `#tui-section-${activeIndex}`;
+  return { activeIndex, focusedSelector, tabIndex, ariaLabel, ariaSelected: options.ariaSelected ?? true, hasFocus: true, ready: section !== undefined };
+}
 export interface BrowserEvalRunResult {
   success: boolean;
   stepsCompleted: number;
