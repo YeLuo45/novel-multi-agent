@@ -105,6 +105,9 @@ import {
   buildBrowserEvalAdapter,
   planBrowserEvalSteps,
   simulateBrowserEval,
+  buildTuiSectionVisual,
+  planTuiHighlight,
+  buildTuiScrollPlan,
   buildWorkspacePersistencePlan,
   createExecutableProviderSmoke,
   generatePagesVerifyScript,
@@ -1727,5 +1730,55 @@ describe('web-first studio models', () => {
     assert.equal(timeline.ready, true);
     assert.ok(timeline.steps.every((s) => s.status === 'success'));
     assert.ok(timeline.steps.every((s) => s.durationMs >= 0));
+  });
+
+  it('builds V71 TUI section visual with active first last icon accent border badge and scroll offset', () => {
+    const v0 = buildTuiSectionVisual('header', 0, 5, 0);
+    assert.equal(v0.sectionId, 'header');
+    assert.equal(v0.index, 0);
+    assert.equal(v0.isActive, true);
+    assert.equal(v0.isFirst, true);
+    assert.equal(v0.isLast, false);
+    assert.equal(v0.icon, '▶');
+    assert.equal(v0.accentColor, '#2563eb');
+    assert.equal(v0.borderStyle, 'double');
+    assert.equal(v0.badge, '▶');
+    assert.equal(v0.scrollOffset, 0);
+
+    const v2 = buildTuiSectionVisual('V42', 2, 5, 0);
+    assert.equal(v2.isActive, false);
+    assert.equal(v2.isFirst, false);
+    assert.equal(v2.icon, '·');
+    assert.equal(v2.badge, '·');
+    assert.equal(v2.borderStyle, 'dotted');
+    assert.ok(v2.scrollOffset >= 0);
+  });
+
+  it('plans V71 TUI highlight with all section visuals activeIndex scroll target and palette', () => {
+    const sections = [{ id: 'header' }, { id: 'V41' }, { id: 'V42' }, { id: 'V58' }];
+    const plan = planTuiHighlight(sections, 2, { themePalette: ['#ff0000', '#00ff00', '#0000ff', '#ffff00'], scrollBehavior: 'smooth' });
+    assert.equal(plan.activeIndex, 2);
+    assert.equal(plan.totalSections, 4);
+    assert.equal(plan.sections.length, 4);
+    assert.ok(plan.themePalette.length === 4);
+    assert.equal(plan.scrollBehavior, 'smooth');
+    assert.equal(plan.sections[2]?.isActive, true);
+    assert.equal(plan.sections[0]?.isFirst, true);
+    assert.ok(plan.scrollTarget >= 0);
+    assert.equal(plan.ready, true);
+  });
+
+  it('builds V71 TUI scroll plan with containerHeight itemHeight scrollY maxScrollY visible range and needsScroll', () => {
+    const sections = [{ id: 's0' }, { id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }, { id: 's5' }];
+    const plan = buildTuiScrollPlan(sections, 4, { containerHeight: 96, itemHeight: 24 });
+    assert.equal(plan.containerHeight, 96);
+    assert.equal(plan.itemHeight, 24);
+    assert.equal(plan.scrollY, 96);
+    assert.ok(plan.maxScrollY >= 0);
+    assert.ok(plan.visibleRange[0] >= 0);
+    assert.ok(plan.visibleRange[1] >= plan.visibleRange[0]);
+    assert.equal(plan.paddingTop, 8);
+    assert.equal(plan.paddingBottom, 8);
+    assert.equal(plan.ready, true);
   });
 });

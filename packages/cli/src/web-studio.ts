@@ -606,6 +606,75 @@ export function planCliCommand(input: string, options: { allowedCommands?: strin
   const helpEntry: ReplHelpEntry | undefined = matched ? { command: matched.name, description: matched.description, flags: matched.flags } : undefined;
   return { ...plan, helpEntry };
 }
+export interface TuiSectionVisual {
+  sectionId: string;
+  index: number;
+  isActive: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  icon: string;
+  accentColor: string;
+  borderStyle: 'solid' | 'dashed' | 'double' | 'dotted';
+  scrollOffset: number;
+  badge: '▶' | '●' | '○' | '·';
+}
+
+export interface TuiHighlightPlan {
+  sections: TuiSectionVisual[];
+  activeIndex: number;
+  totalSections: number;
+  scrollTarget: number;
+  scrollBehavior: 'instant' | 'smooth' | 'auto';
+  themePalette: string[];
+  ready: boolean;
+}
+
+export interface TuiScrollPlan {
+  containerHeight: number;
+  itemHeight: number;
+  scrollY: number;
+  maxScrollY: number;
+  visibleRange: [number, number];
+  paddingTop: number;
+  paddingBottom: number;
+  needsScroll: boolean;
+  ready: boolean;
+}
+
+const TUI_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+
+export function buildTuiSectionVisual(sectionId: string, index: number, totalSections: number, activeIndex: number): TuiSectionVisual {
+  const isActive = index === activeIndex;
+  const isFirst = index === 0;
+  const isLast = index === totalSections - 1;
+  const icon = isActive ? '▶' : isFirst ? '●' : isLast ? '○' : '·';
+  const accentColor = isActive ? '#2563eb' : isFirst ? '#10b981' : isLast ? '#f59e0b' : TUI_PALETTE[index % TUI_PALETTE.length] ?? '#6b7280';
+  const borderStyle: TuiSectionVisual['borderStyle'] = isActive ? 'double' : isFirst ? 'solid' : isLast ? 'dashed' : 'dotted';
+  const scrollOffset = isActive ? 0 : Math.abs(index - activeIndex) * 24;
+  const badge: TuiSectionVisual['badge'] = isActive ? '▶' : isFirst ? '●' : isLast ? '○' : '·';
+  return { sectionId, index, isActive, isFirst, isLast, icon, accentColor, borderStyle, scrollOffset, badge };
+}
+
+export function planTuiHighlight(sections: Array<{ id: string }>, activeIndex: number, options: { themePalette?: string[]; scrollBehavior?: 'instant' | 'smooth' | 'auto' } = {}): TuiHighlightPlan {
+  const palette = options.themePalette ?? TUI_PALETTE;
+  const scrollBehavior = options.scrollBehavior ?? 'smooth';
+  const sectionVisuals: TuiSectionVisual[] = sections.map((section, index) => buildTuiSectionVisual(section.id, index, sections.length, activeIndex));
+  const scrollTarget = sectionVisuals[activeIndex]?.scrollOffset ?? 0;
+  return { sections: sectionVisuals, activeIndex, totalSections: sections.length, scrollTarget, scrollBehavior, themePalette: palette, ready: sectionVisuals.length > 0 };
+}
+
+export function buildTuiScrollPlan(sections: Array<{ id: string }>, activeIndex: number, options: { containerHeight?: number; itemHeight?: number } = {}): TuiScrollPlan {
+  const containerHeight = options.containerHeight ?? 480;
+  const itemHeight = options.itemHeight ?? 32;
+  const scrollY = activeIndex * itemHeight;
+  const maxScrollY = Math.max(0, sections.length * itemHeight - containerHeight);
+  const visibleStart = Math.floor(scrollY / itemHeight);
+  const visibleEnd = Math.min(sections.length, visibleStart + Math.ceil(containerHeight / itemHeight));
+  const paddingTop = 8;
+  const paddingBottom = 8;
+  const needsScroll = scrollY > maxScrollY || scrollY < 0;
+  return { containerHeight, itemHeight, scrollY, maxScrollY, visibleRange: [visibleStart, visibleEnd], paddingTop, paddingBottom, needsScroll, ready: sections.length > 0 };
+}
 export interface BrowserEvalAdapter {
   evalCode: IdbEvalCode;
   target: 'browser' | 'node';

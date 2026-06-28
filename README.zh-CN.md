@@ -49,6 +49,13 @@ npm run bootstrap
 
 `npm run verify:readme` 会按本文档列出的命令逐条重新执行，确保 README 与本地 `.novel-ma/projects/` 真实状态一致。
 
+## V71 TUI 视觉高亮（active ▶ / scroll plan / palette + border style）
+
+- `buildTuiSectionVisual(sectionId, index, totalSections, activeIndex)`：返回 `TuiSectionVisual{isActive, isFirst, isLast, icon, accentColor, borderStyle, scrollOffset, badge}` 10 字段；active ▶ / first ● / last ○ / other ·，borderStyle active=double/first=solid/last=dashed/other=dotted。
+- `planTuiHighlight(sections, activeIndex, {themePalette, scrollBehavior})`：聚合所有 section visual + scrollTarget + scrollBehavior（instant/smooth/auto）。
+- `buildTuiScrollPlan(sections, activeIndex, {containerHeight, itemHeight})`：返回 `TuiScrollPlan{scrollY, maxScrollY, visibleRange, paddingTop/Bottom, needsScroll, ready}`。
+- HTML 集成：3 个 inline 按钮（section/highlight/scroll），从 8 section 列表取视觉配置。
+
 ## V70 浏览器端 eval 真实执行（BrowserEvalAdapter + 6 步骤 timeline）
 
 - `buildBrowserEvalAdapter(evalCode, {fallbackStorageKey, timeoutMs})`：包装 V67 eval code 为浏览器端执行器，6 步骤 (pre-check / fallback check / execute / await / on-error fallback / return result) + fallbackStorageKey 绑定。
